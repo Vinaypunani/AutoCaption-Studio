@@ -65,10 +65,10 @@ def test_pipeline_reports_intermediate_stages(qapp, config, app_state, ffmpeg, f
     service.process_job(job.job_id)
     # Wait for the final stage to be *delivered* (not just mutated on the
     # shared job object) so we can assert on the observed sequence.
-    _wait_for(lambda: "Ready" in observed)
+    _wait_for(lambda: "Completed" in observed)
     assert any(
         stage in observed
-        for stage in ("Validating", "Reading Metadata", "Generating Thumbnail", "Extracting Audio")
+        for stage in ("Validated", "Metadata Ready", "Thumbnail Ready", "Audio Ready")
     )
 
 

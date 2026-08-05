@@ -73,10 +73,28 @@ def test_job_serializes_metadata():
     from src.video.metadata import VideoMetadata
 
     meta = VideoMetadata(filename="clip.mp4", extension=".mp4", path="C:/clip.mp4", duration_sec=12.5)
-    job = Job(filename="clip.mp4", path="C:/clip.mp4", stage=ProcessStage.READY, metadata=meta, progress=100.0)
+    job = Job(filename="clip.mp4", path="C:/clip.mp4", stage=ProcessStage.COMPLETED, metadata=meta, progress=100.0)
     data = job.to_dict()
-    assert data["stage"] == "Ready"
+    assert data["stage"] == "Completed"
     assert data["metadata"]["duration_sec"] == 12.5
+
+
+def test_job_phase3_defaults():
+    job = Job(filename="clip.mp4")
+    assert job.transcript_path == ""
+    assert job.transcript is None
+    assert job.word_count() == 0
+
+
+def test_job_word_count_from_transcript():
+    job = Job(filename="clip.mp4")
+    job.transcript = {
+        "segments": [
+            {"words": [{"word": "Hello"}, {"word": "world"}]},
+            {"words": [{"word": "!"}]},
+        ]
+    }
+    assert job.word_count() == 3
 
 
 def test_job_duration_uses_metadata():

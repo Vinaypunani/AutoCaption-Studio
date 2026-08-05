@@ -20,15 +20,15 @@ def _click(widget):
 
 
 def test_row_shows_stage(qapp):
-    job = Job(filename="clip.mp4", path="C:/clip.mp4", stage=ProcessStage.VALIDATING)
+    job = Job(filename="clip.mp4", path="C:/clip.mp4", stage=ProcessStage.VALIDATED)
     row = JobRow(job)
-    assert row.chip.text() == "Validating"
+    assert row.chip.text() == "Validated"
 
 
 def test_row_shows_ready_stage(qapp):
-    job = Job(filename="clip.mp4", path="C:/clip.mp4", stage=ProcessStage.READY)
+    job = Job(filename="clip.mp4", path="C:/clip.mp4", stage=ProcessStage.COMPLETED)
     row = JobRow(job)
-    assert row.chip.text() == "Ready"
+    assert row.chip.text() == "Completed"
 
 
 def test_row_selection_emits_and_styles(qapp):

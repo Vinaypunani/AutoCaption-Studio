@@ -417,6 +417,11 @@ QListWidget#RecentList::item:selected {
     color: #dc2626;
 }
 
+#StatusChip[status="cancelled"] {
+    background: rgba(100, 116, 139, 0.10);
+    color: #64748b;
+}
+
 #RemoveButton {
     background: transparent;
     border: none;

@@ -18,6 +18,10 @@ output/*
 temp/*
 !temp/.gitkeep
 
+# Whisper model cache (keep the directory, ignore contents)
+models/*
+!models/.gitkeep
+
 # OS
 .DS_Store
 Thumbs.db

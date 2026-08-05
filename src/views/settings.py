@@ -17,10 +17,13 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
+from ..ai.whisper.model_manager import MODEL_CATALOG, detect_device
+from ..ai.whisper.settings import COMMON_LANGUAGES, ComputeType, DeviceType, LanguageMode, WhisperSettings
 from ..core.app_state import AppState
 from ..core.config_manager import ConfigManager
 from ..core.logger import get_logger
@@ -31,6 +34,24 @@ log = get_logger("settings_view")
 
 _LANGUAGES = ["English", "Español", "Français", "Deutsch", "日本語"]
 _CHANNELS = ["stable", "beta", "nightly"]
+
+_DEVICE_LABELS = {
+    "auto": f"Auto ({detect_device()})",
+    "cpu": "CPU",
+    "cuda": "NVIDIA CUDA",
+    "directml": "DirectML (future)",
+    "metal": "Apple Metal (future)",
+}
+_COMPUTE_LABELS = {
+    "default": "Default (int8 on CPU / float16 on GPU)",
+    "int8": "int8 (fast, lower quality)",
+    "float16": "float16 (GPU)",
+    "float32": "float32 (highest quality)",
+}
+
+
+def _mb(size_hint_gb: float) -> str:
+    return f"~{int(size_hint_gb * 1024)} MB"
 
 
 class SettingsView(QWidget):
@@ -127,6 +148,61 @@ class SettingsView(QWidget):
         o_form.addWidget(self.autosave_check)
         outer.addWidget(make_card("Output", output))
 
+        # -- AI / transcription ---------------------------------------------------
+        ai_widget = QWidget()
+        ai_form = QVBoxLayout(ai_widget)
+        ai_form.setContentsMargins(0, 0, 0, 0)
+        ai_form.setSpacing(10)
+
+        self.model_combo = QComboBox()
+        self.model_combo.setObjectName("SettingsCombo")
+        for name, meta in MODEL_CATALOG.items():
+            self.model_combo.addItem(f"{name} ({_mb(meta['size_hint_gb'])})", name)
+        ai_form.addWidget(make_field("Active Model (downloads on first use)", self.model_combo))
+
+        self.device_combo = QComboBox()
+        self.device_combo.setObjectName("SettingsCombo")
+        for key, label in _DEVICE_LABELS.items():
+            self.device_combo.addItem(label, key)
+        ai_form.addWidget(make_field("Device", self.device_combo))
+
+        self.compute_combo = QComboBox()
+        self.compute_combo.setObjectName("SettingsCombo")
+        for key, label in _COMPUTE_LABELS.items():
+            self.compute_combo.addItem(label, key)
+        ai_form.addWidget(make_field("Compute Type", self.compute_combo))
+
+        beam_row = QHBoxLayout()
+        beam_row.setSpacing(12)
+        self.beam_spin = QSpinBox()
+        self.beam_spin.setRange(1, 20)
+        self.beam_spin.setValue(5)
+        beam_row.addWidget(make_field("Beam Size", self.beam_spin), 1)
+        self.threads_spin = QSpinBox()
+        self.threads_spin.setRange(0, 64)
+        self.threads_spin.setValue(0)
+        self.threads_spin.setToolTip("0 = let the engine decide")
+        beam_row.addWidget(make_field("CPU Threads (0 = auto)", self.threads_spin), 1)
+        ai_form.addLayout(beam_row)
+
+        self.language_mode_combo = QComboBox()
+        self.language_mode_combo.setObjectName("SettingsCombo")
+        self.language_mode_combo.addItem("Auto-detect", "auto")
+        self.language_mode_combo.addItem("Manual", "manual")
+        self.language_mode_combo.currentIndexChanged.connect(self._sync_language_enabled)
+        ai_form.addWidget(make_field("Language Mode", self.language_mode_combo))
+
+        self.whisper_language_combo = QComboBox()
+        self.whisper_language_combo.setObjectName("SettingsCombo")
+        for code, label in COMMON_LANGUAGES.items():
+            self.whisper_language_combo.addItem(f"{label} ({code})", code)
+        ai_form.addWidget(make_field("Language (manual mode)", self.whisper_language_combo))
+
+        self.auto_transcribe_check = QCheckBox("Auto-transcribe after audio extraction")
+        self.auto_transcribe_check.setToolTip("Runs the Whisper stage for every processed video")
+        ai_form.addWidget(self.auto_transcribe_check)
+        outer.addWidget(make_card("AI / Transcription", ai_widget))
+
         # -- updates -----------------------------------------------------------
         updates = QWidget()
         u_form = QVBoxLayout(updates)
@@ -181,12 +257,32 @@ class SettingsView(QWidget):
         channel = str(self.config.get("update_channel", "stable"))
         self.channel_combo.setCurrentText(channel.title())
 
+        whisper = WhisperSettings.from_config(self.config)
+        index = self.model_combo.findData(whisper.model)
+        self.model_combo.setCurrentIndex(max(0, index))
+        index = self.device_combo.findData(whisper.device.value)
+        self.device_combo.setCurrentIndex(max(0, index))
+        index = self.compute_combo.findData(whisper.compute_type.value)
+        self.compute_combo.setCurrentIndex(max(0, index))
+        self.beam_spin.setValue(whisper.beam_size)
+        self.threads_spin.setValue(whisper.threads)
+        mode_index = 0 if whisper.language_mode.value == "auto" else 1
+        self.language_mode_combo.setCurrentIndex(mode_index)
+        lang_index = self.whisper_language_combo.findData(whisper.language)
+        self.whisper_language_combo.setCurrentIndex(max(0, lang_index))
+        self.auto_transcribe_check.setChecked(whisper.auto_transcribe)
+        self._sync_language_enabled()
+
     def _on_theme_preview(self, index: int) -> None:
         theme = self.theme_combo.itemData(index)
         if theme:
             self.app_state.set_theme(theme, persist=False)  # applied now, saved on Save
 
     # -- actions -----------------------------------------------------------
+    def _sync_language_enabled(self) -> None:
+        manual = self.language_mode_combo.currentData() == "manual"
+        self.whisper_language_combo.setEnabled(manual)
+
     def _save(self) -> None:
         theme = self.theme_combo.currentData() or "dark"
         self.config.set("theme", theme)
@@ -195,6 +291,18 @@ class SettingsView(QWidget):
         self.config.set("output_folder", self.output_edit.text().strip() or "output")
         self.config.set("autosave", self.autosave_check.isChecked())
         self.config.set("update_channel", self.channel_combo.currentText().lower())
+        whisper = WhisperSettings(
+            model=self.model_combo.currentData() or "tiny",
+            device=DeviceType(self.device_combo.currentData() or "auto"),
+            beam_size=self.beam_spin.value(),
+            compute_type=ComputeType(self.compute_combo.currentData() or "default"),
+            language_mode=LanguageMode(self.language_mode_combo.currentData() or "auto"),
+            language=self.whisper_language_combo.currentData() or "en",
+            threads=self.threads_spin.value(),
+            auto_transcribe=self.auto_transcribe_check.isChecked(),
+        )
+        whisper.validate()
+        whisper.save_to_config(self.config)
         self.config.save()
         self.app_state.set_theme(theme, persist=False)
         self.app_state.set_status("Settings saved to config/settings.json")

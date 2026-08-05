@@ -22,7 +22,9 @@ from src.core.constants import APP_NAME, APP_VERSION, LOGO_PATH, ORG_NAME
 from src.core.logger import get_logger, install_global_exception_handler, setup_logging
 from src.main_window import MainWindow
 from src.services.theme_service import ThemeService
+from src.services.transcription_service import TranscriptionService
 from src.services.video_service import VideoService
+from src.ai.whisper.settings import WhisperSettings
 from src.video import FFmpegManager, FileManager
 
 
@@ -54,11 +56,18 @@ def main() -> int:
     # Phase 2: media pipeline (validation, metadata, thumbnails, audio).
     ffmpeg = FFmpegManager()
     file_manager = FileManager()
-    video_service = VideoService(app_state, ffmpeg, file_manager)
+    # Phase 3: speech recognition stage.
+    transcription_service = TranscriptionService(config)
+    video_service = VideoService(app_state, ffmpeg, file_manager, transcription_service)
     if video_service.can_process():
         logger.info("FFmpeg available: %s", video_service.ffmpeg_version())
     else:
         logger.warning("FFmpeg not available — video pipeline disabled")
+    logger.info(
+        "Transcription engine: %s (model=%s)",
+        "enabled" if transcription_service.enabled() else "disabled",
+        WhisperSettings.from_config(config).model,
+    )
 
     # --- window -------------------------------------------------------------
     window = MainWindow(config, app_state, theme_service, video_service)

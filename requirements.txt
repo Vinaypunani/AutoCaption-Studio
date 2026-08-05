@@ -1,4 +1,4 @@
-# AutoCaption Studio — Phase 2 (Video Processing Engine)
+# AutoCaption Studio — Phase 3 (AI Speech Recognition Engine)
 #
 # UI framework. QtMultimedia (video preview) ships in PySide6-Addons, which
 # is pulled in by the PySide6 metapackage — on some Windows setups a short
@@ -12,6 +12,11 @@ imageio-ffmpeg>=0.5
 
 # Frame brightness analysis for "first meaningful frame" thumbnails.
 Pillow>=10
+
+# Speech recognition (Phase 3). CTranslate2-based Whisper with word-level
+# timestamps; models auto-download from Hugging Face into models/.
+faster-whisper>=1.0
+huggingface-hub>=0.24
 
 # Development / testing
 #   pip install pytest

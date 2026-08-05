@@ -14,5 +14,15 @@
         "x": 320,
         "y": 116,
         "maximized": false
+    },
+    "whisper": {
+        "model": "tiny",
+        "device": "auto",
+        "beam_size": 5,
+        "compute_type": "default",
+        "language_mode": "auto",
+        "language": "en",
+        "threads": 0,
+        "auto_transcribe": true
     }
 }

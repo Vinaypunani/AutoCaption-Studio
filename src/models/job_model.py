@@ -14,6 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
+from ..core.pipeline import PipelineStage as ProcessStage  # noqa: F401 (re-exported for compatibility)
 from ..video.metadata import VideoMetadata
 
 
@@ -24,22 +25,11 @@ class JobStatus(str, Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
     @property
     def display(self) -> str:
         return self.value.title()
-
-
-class ProcessStage(str, Enum):
-    """Fine-grained progress stage of the Phase 2 pipeline."""
-
-    WAITING = "Waiting"
-    VALIDATING = "Validating"
-    READING_METADATA = "Reading Metadata"
-    GENERATING_THUMBNAIL = "Generating Thumbnail"
-    EXTRACTING_AUDIO = "Extracting Audio"
-    READY = "Ready"
-    FAILED = "Failed"
 
 
 def format_mmss(total_seconds: float | int) -> str:
@@ -73,6 +63,10 @@ class Job:
     error: str = ""
     demo: bool = False  # True = sample/mock job (no real file)
 
+    # -- Phase 3 ------------------------------------------------------------
+    transcript_path: str = ""  # JSON transcript under output/transcripts/
+    transcript: Optional[dict] = None  # in-memory copy (also persisted to disk)
+
     @classmethod
     def from_path(cls, path: str | Path, status: JobStatus = JobStatus.WAITING) -> "Job":
         """Build a waiting job from a video file path (no probing yet)."""
@@ -93,6 +87,15 @@ class Job:
     def stage_display(self) -> str:
         return self.stage.value
 
+    def word_count(self) -> int:
+        """Total transcribed words (0 when no transcript yet)."""
+        if not self.transcript:
+            return 0
+        return sum(
+            len(segment.get("words", []))
+            for segment in self.transcript.get("segments", [])
+        )
+
     # -- serialization ---------------------------------------------------------
     def to_dict(self) -> dict:
         """Serialize for future persistence (e.g. resuming a session)."""
@@ -109,6 +112,7 @@ class Job:
             "metadata": self.metadata.to_dict() if self.metadata else None,
             "thumbnail_path": self.thumbnail_path,
             "audio_path": self.audio_path,
+            "transcript_path": self.transcript_path,
             "error": self.error,
             "demo": self.demo,
         }

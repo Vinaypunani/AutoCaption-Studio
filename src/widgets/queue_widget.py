@@ -34,7 +34,12 @@ _STAGE_CHIP_COLOR: dict[ProcessStage, str] = {
     ProcessStage.READING_METADATA: "running",
     ProcessStage.GENERATING_THUMBNAIL: "running",
     ProcessStage.EXTRACTING_AUDIO: "running",
+    ProcessStage.TRANSCRIBING: "running",
+    ProcessStage.TRANSCRIPTION_READY: "completed",
+    ProcessStage.SUBTITLE_READY: "completed",
+    ProcessStage.RENDER_READY: "completed",
     ProcessStage.READY: "completed",
+    ProcessStage.CANCELLED: "cancelled",
     ProcessStage.FAILED: "failed",
 }
 
@@ -43,6 +48,7 @@ _WORK_STAGES = {
     ProcessStage.READING_METADATA,
     ProcessStage.GENERATING_THUMBNAIL,
     ProcessStage.EXTRACTING_AUDIO,
+    ProcessStage.TRANSCRIBING,
 }
 
 

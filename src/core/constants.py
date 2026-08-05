@@ -49,6 +49,12 @@ THUMBNAILS_DIR = TEMP_DIR / "thumbnails"
 AUDIO_DIR = TEMP_DIR / "audio"
 WORKING_DIR = TEMP_DIR / "working"
 
+# Phase 3: model cache + transcript output.
+MODELS_DIR = PROJECT_ROOT / "models"
+TRANSCRIPTS_DIR = OUTPUT_DIR / "transcripts"
+TRANSCRIPT_JSON_EXT = ".json"
+TRANSCRIPT_TXT_EXT = ".txt"
+
 # Thumbnail / audio conventions.
 THUMBNAIL_EXT = ".jpg"
 AUDIO_EXT = ".wav"
@@ -79,6 +85,16 @@ DEFAULT_SETTINGS: dict = {
     "update_channel": "stable",
     "recent_files": [],
     "window": {"width": 1280, "height": 800, "maximized": False},
+    "whisper": {
+        "model": "tiny",
+        "device": "auto",
+        "beam_size": 5,
+        "compute_type": "default",
+        "language_mode": "auto",
+        "language": "en",
+        "threads": 0,
+        "auto_transcribe": True,
+    },
 }
 
 MAX_RECENT_FILES = 5

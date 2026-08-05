@@ -31,7 +31,9 @@ from src.core.constants import APP_NAME, LOG_FILE_PATH, OUTPUT_DIR  # noqa: E402
 from src.core.logger import get_logger, setup_logging  # noqa: E402
 from src.main_window import MainWindow  # noqa: E402
 from src.models.job_model import Job, JobStatus  # noqa: E402
+from src.ai.whisper.settings import WhisperSettings  # noqa: E402
 from src.services.theme_service import ThemeService  # noqa: E402
+from src.services.transcription_service import TranscriptionService  # noqa: E402
 from src.services.video_service import VideoService  # noqa: E402
 from src.video import FFmpegManager, FileManager  # noqa: E402
 
@@ -62,11 +64,20 @@ def main() -> int:
     app = QApplication(sys.argv)
 
     config = ConfigManager()
+    # Keep the smoke run deterministic: disable the transcription stage so it
+    # never tries to download a Whisper model (transcription itself is
+    # covered by the unit/integration test suite with fake engines).
+    whisper = WhisperSettings.from_config(config).to_dict()
+    whisper["auto_transcribe"] = False
+    config.set("whisper", whisper)
+
     app_state = AppState(config)
     theme_service = ThemeService()
     ffmpeg = FFmpegManager()
     file_manager = FileManager()
-    video_service = VideoService(app_state, ffmpeg, file_manager)
+    transcription_service = TranscriptionService(config)
+    assert transcription_service.enabled() is False, "smoke run must not auto-download models"
+    video_service = VideoService(app_state, ffmpeg, file_manager, transcription_service)
     assert video_service.can_process(), "ffmpeg must be available for the smoke run"
 
     window = MainWindow(config, app_state, theme_service, video_service)
@@ -122,7 +133,7 @@ def main() -> int:
 
     logger.info("Smoke run finished; log file: %s", LOG_FILE_PATH)
     assert LOG_FILE_PATH.exists(), "log file was not created"
-    print("smoke run OK — Phase 2 pipeline verified; previews in output/")
+    print("smoke run OK — Phase 3 app verified (media pipeline + UI); previews in output/")
     return 0
 
 

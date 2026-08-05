@@ -10,12 +10,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QTimer, Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
     QScrollArea,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -38,6 +40,7 @@ class QueueView(QWidget):
         super().__init__(parent)
         self.app_state = app_state
         self.video_service = video_service
+        self._last_transcript_path = ""
         self.setObjectName("QueueView")
 
         scroll = QScrollArea()
@@ -77,6 +80,13 @@ class QueueView(QWidget):
         self.clear_button.clicked.connect(self.app_state.clear_jobs)
         toolbar.addWidget(self.clear_button)
 
+        self.cancel_button = QPushButton("Cancel Selected")
+        self.cancel_button.setObjectName("GhostButton")
+        self.cancel_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.cancel_button.setToolTip("Cancel the selected job (takes effect between pipeline stages)")
+        self.cancel_button.clicked.connect(self._cancel_selected)
+        toolbar.addWidget(self.cancel_button)
+
         toolbar.addStretch(1)
 
         self.count_label = QLabel("")
@@ -114,6 +124,23 @@ class QueueView(QWidget):
         self.video_info = VideoInfoPanel()
         split.addWidget(self.video_info, 4)
         detail_layout.addLayout(split)
+
+        # -- transcript summary row -------------------------------------------
+        transcript_row = QHBoxLayout()
+        transcript_row.setSpacing(8)
+        self.transcript_label = QLabel("No transcript yet")
+        self.transcript_label.setObjectName("JobMeta")
+        self.transcript_label.setWordWrap(True)
+        transcript_row.addWidget(self.transcript_label, 1)
+        self.open_transcript_button = QToolButton()
+        self.open_transcript_button.setObjectName("LinkButton")
+        self.open_transcript_button.setText("Open Transcript")
+        self.open_transcript_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_transcript_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.open_transcript_button.clicked.connect(self._open_transcript)
+        self.open_transcript_button.setVisible(False)
+        transcript_row.addWidget(self.open_transcript_button)
+        detail_layout.addLayout(transcript_row)
 
         outer.addWidget(make_card(None, detail))
 
@@ -177,7 +204,45 @@ class QueueView(QWidget):
             self.preview.set_source(job.path)
         else:
             self.preview.clear()
+        self._update_transcript_row(job)
         self.app_state.set_status(f"Inspecting {job.filename}")
+
+    def _update_transcript_row(self, job) -> None:
+        transcript_path = job.transcript_path
+        if transcript_path and Path(transcript_path).exists():
+            words = job.word_count()
+            language = "—"
+            if job.transcript and job.transcript.get("language"):
+                language = job.transcript["language"]
+            self.transcript_label.setText(
+                f"Transcript ready: {words} words · language {language} · {Path(transcript_path).name}"
+            )
+            self.open_transcript_button.setVisible(True)
+            self._last_transcript_path = transcript_path
+        else:
+            if job.stage is ProcessStage.FAILED:
+                self.transcript_label.setText(f"Transcription failed: {job.error or 'unknown error'}")
+            else:
+                self.transcript_label.setText(
+                    "No transcript yet — transcription runs automatically after audio extraction"
+                )
+            self.open_transcript_button.setVisible(False)
+            self._last_transcript_path = ""
+
+    def _open_transcript(self) -> None:
+        if self._last_transcript_path:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(self._last_transcript_path))
+
+    def _cancel_selected(self) -> None:
+        job_id = self.queue_widget.selected_job_id()
+        if not job_id:
+            self.app_state.set_status("Select a job to cancel it")
+            return
+        if self.video_service is not None:
+            self.video_service.cancel_job(job_id)
+            self.app_state.set_status("Cancel requested")
+        else:
+            self.app_state.set_status("No pipeline available to cancel")
 
     def _sync_detail(self) -> None:
         selected = self.queue_widget.selected_job_id()
