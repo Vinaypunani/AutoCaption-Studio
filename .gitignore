@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.idea/
+.vscode/
+.pytest_cache/
+
+# Logs (keep the directory, ignore contents)
+logs/*
+!logs/.gitkeep
+
+# App output / temp data (keep directories, ignore contents)
+output/*
+!output/.gitkeep
+temp/*
+!temp/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files created by the config manager
+config/*.bak

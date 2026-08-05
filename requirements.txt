@@ -1,0 +1,7 @@
+# AutoCaption Studio — Phase 1 (Desktop Application Foundation)
+#
+# UI framework (Python 3.12+; wheels available for 3.13+)
+PySide6>=6.8
+
+# Development / testing
+#   pip install pytest

@@ -1,0 +1,14 @@
+{
+    "theme": "dark",
+    "language": "English",
+    "gpu": true,
+    "output_folder": "output",
+    "autosave": true,
+    "update_channel": "stable",
+    "recent_files": [],
+    "window": {
+        "width": 1280,
+        "height": 800,
+        "maximized": false
+    }
+}

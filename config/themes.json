@@ -1,0 +1,14 @@
+{
+    "dark": {
+        "display_name": "Dark",
+        "qss": "dark.qss",
+        "accent": "#6c8cff",
+        "track": "#2b2e37"
+    },
+    "light": {
+        "display_name": "Light",
+        "qss": "light.qss",
+        "accent": "#4f6ef7",
+        "track": "#e3e6ec"
+    }
+}
