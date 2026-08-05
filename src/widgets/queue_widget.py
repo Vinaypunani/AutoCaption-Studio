@@ -13,17 +13,13 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QLabel,
     QScrollArea,
-    QSizePolicy,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from ..models.job_model import Job, JobStatus
-from ..core.logger import get_logger
 from .progress_widget import ProgressWidget
-
-log = get_logger("queue_widget")
 
 _COL_FILE = 0
 _COL_STATUS = 1

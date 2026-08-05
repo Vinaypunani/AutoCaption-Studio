@@ -227,10 +227,8 @@ class MainWindow(QMainWindow):
 
     # -------------------------------------------------- frameless event filter
     def eventFilter(self, obj, event) -> bool:  # noqa: N802 (Qt naming)
-        from PySide6.QtWidgets import QWidget as _QWidget  # local alias
-
         if (
-            isinstance(obj, _QWidget)
+            isinstance(obj, QWidget)
             and obj.window() is self
             and not self.isMaximized()
         ):
@@ -247,6 +245,9 @@ class MainWindow(QMainWindow):
                 cursor = self._EDGE_CURSORS.get(mode) if mode else Qt.CursorShape.ArrowCursor
                 if self.cursor().shape() != cursor:
                     self.setCursor(QCursor(cursor))
+            elif event_type == QEvent.Type.Leave and obj is self and not self._drag_mode:
+                # The mouse left the window; drop any edge-resize cursor.
+                self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
             elif event_type == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
                 mode = self._edge_mode_at(obj.mapTo(self, event.position().toPoint()))
                 if mode:

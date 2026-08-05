@@ -28,7 +28,7 @@ from ..core.constants import SUPPORTED_VIDEO_FILTER
 from ..core.logger import get_logger
 from ..models.job_model import Job
 from ..services.theme_service import ThemeService
-from ..widgets.cards import make_card
+from ..widgets.cards import make_card, make_field
 from ..widgets.drop_zone import DropZone
 from ..widgets.queue_widget import QueueWidget
 
@@ -167,7 +167,7 @@ class HomeView(QWidget):
             max(0, self.theme_combo.findData(self.app_state.theme()))
         )
         self.theme_combo.currentIndexChanged.connect(self._on_quick_theme)
-        layout.addWidget(self._labeled("Theme", self.theme_combo))
+        layout.addWidget(make_field("Theme", self.theme_combo))
 
         self.gpu_check = QCheckBox("Use GPU acceleration")
         self.gpu_check.setChecked(bool(self.config.get("gpu", True)))
@@ -182,18 +182,6 @@ class HomeView(QWidget):
 
         layout.addStretch(1)
         return container
-
-    @staticmethod
-    def _labeled(text: str, widget: QWidget) -> QWidget:
-        row = QWidget()
-        layout = QVBoxLayout(row)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-        label = QLabel(text)
-        label.setObjectName("FieldLabel")
-        layout.addWidget(label)
-        layout.addWidget(widget)
-        return row
 
     # -- state wiring ------------------------------------------------------
     def _connect_state(self) -> None:
@@ -240,10 +228,10 @@ class HomeView(QWidget):
             self._on_files_dropped(files)
 
     def _on_files_dropped(self, paths: list[str]) -> None:
-        for path in paths:
-            job = Job.from_path(path)
-            self.app_state.add_job(job)
-            self.app_state.add_recent_file(path)
+        for index, path in enumerate(paths):
+            self.app_state.add_job(Job.from_path(path))
+            # Persist the recent-files list once, after the last path.
+            self.app_state.add_recent_file(path, persist=index == len(paths) - 1)
         self.drop_zone.set_file_name(Path(paths[0]).name)
         self.app_state.set_status(f"Queued {len(paths)} file(s) — captioning arrives in a later phase")
         log.info("Accepted %d file(s) into the queue: %s", len(paths), paths)

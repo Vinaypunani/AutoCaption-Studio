@@ -24,8 +24,14 @@ log = get_logger("drop_zone")
 
 
 def is_supported_video(path: str | Path) -> bool:
-    """True if the file extension is in the supported video set."""
-    return Path(path).suffix.lower() in SUPPORTED_VIDEO_EXTS
+    """True if the path looks like a supported video file."""
+    candidate = Path(path)
+    if candidate.suffix.lower() not in SUPPORTED_VIDEO_EXTS:
+        return False
+    # A *directory* dragged in with a video-like name is not a video file.
+    if candidate.exists() and not candidate.is_file():
+        return False
+    return True
 
 
 class DropZone(QFrame):

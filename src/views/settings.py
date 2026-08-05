@@ -25,7 +25,7 @@ from ..core.app_state import AppState
 from ..core.config_manager import ConfigManager
 from ..core.logger import get_logger
 from ..services.theme_service import ThemeService
-from ..widgets.cards import make_card
+from ..widgets.cards import make_card, make_field
 
 log = get_logger("settings_view")
 
@@ -76,13 +76,13 @@ class SettingsView(QWidget):
         for theme in self.theme_service.available_themes():
             self.theme_combo.addItem(self.theme_service.display_name(theme), theme)
         self.theme_combo.currentIndexChanged.connect(self._on_theme_preview)
-        form.addWidget(self._field("Theme", self.theme_combo))
+        form.addWidget(make_field("Theme", self.theme_combo))
 
         self.language_combo = QComboBox()
         self.language_combo.setObjectName("SettingsCombo")
         self.language_combo.addItems(_LANGUAGES)
         self.language_combo.setToolTip("UI language — localization arrives in a later phase")
-        form.addWidget(self._field("Language", self.language_combo))
+        form.addWidget(make_field("Language", self.language_combo))
         outer.addWidget(make_card("Appearance", appearance))
 
         # -- processing ------------------------------------------------------
@@ -107,7 +107,9 @@ class SettingsView(QWidget):
         o_form.setContentsMargins(0, 0, 0, 0)
         o_form.setSpacing(10)
 
-        folder_row = QHBoxLayout()
+        folder_widget = QWidget()
+        folder_row = QHBoxLayout(folder_widget)
+        folder_row.setContentsMargins(0, 0, 0, 0)
         folder_row.setSpacing(8)
         self.output_edit = QLineEdit()
         self.output_edit.setPlaceholderText("output")
@@ -118,7 +120,7 @@ class SettingsView(QWidget):
         browse.setCursor(Qt.CursorShape.PointingHandCursor)
         browse.clicked.connect(self._browse_output)
         folder_row.addWidget(browse)
-        o_form.addWidget(self._field("Default Output Folder", folder_row))
+        o_form.addWidget(make_field("Default Output Folder", folder_widget))
 
         self.autosave_check = QCheckBox("Autosave projects automatically")
         self.autosave_check.setToolTip("Reserved for later phases")
@@ -134,7 +136,7 @@ class SettingsView(QWidget):
         self.channel_combo = QComboBox()
         self.channel_combo.setObjectName("SettingsCombo")
         self.channel_combo.addItems([c.title() for c in _CHANNELS])
-        u_form.addWidget(self._field("Update Channel", self.channel_combo))
+        u_form.addWidget(make_field("Update Channel", self.channel_combo))
         outer.addWidget(make_card("Updates", updates))
 
         # -- actions -----------------------------------------------------------
@@ -162,19 +164,6 @@ class SettingsView(QWidget):
         root.addWidget(scroll)
 
         self._load_values()
-
-    # -- form helpers ------------------------------------------------------
-    @staticmethod
-    def _field(label_text: str, widget: QWidget) -> QWidget:
-        row = QWidget()
-        layout = QVBoxLayout(row)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-        label = QLabel(label_text)
-        label.setObjectName("FieldLabel")
-        layout.addWidget(label)
-        layout.addWidget(widget)
-        return row
 
     # -- data binding ------------------------------------------------------
     def _load_values(self) -> None:

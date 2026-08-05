@@ -59,8 +59,13 @@ class ConfigManager:
         return self._data
 
     def _merge_defaults(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """Deep-merge: nested dicts keep their default keys too."""
         merged = copy.deepcopy(self.defaults)
-        merged.update(raw)
+        for key, value in raw.items():
+            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+                merged[key].update(value)
+            else:
+                merged[key] = value
         return merged
 
     # -- persistence -------------------------------------------------------

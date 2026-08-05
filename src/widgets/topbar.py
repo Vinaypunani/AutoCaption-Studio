@@ -7,7 +7,7 @@ maximize / close controls.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QToolButton, QWidget
 
 from ..core.app_state import AppState
@@ -19,8 +19,6 @@ log = get_logger("topbar")
 
 class TopBar(QFrame):
     """Application title bar with window controls."""
-
-    theme_toggled = Signal(bool)  # True -> request dark theme
 
     def __init__(self, app_state: AppState, parent: QWidget | None = None) -> None:
         super().__init__(parent)

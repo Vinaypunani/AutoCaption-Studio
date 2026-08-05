@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QT_VERSION_STR, Qt
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import Qt, qVersion
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -105,7 +105,7 @@ class AboutView(QWidget):
             ("GitHub", None),
             ("Python", sys.version.split()[0]),
             ("PySide6", PYSIDE_VERSION),
-            ("Qt", QT_VERSION_STR),
+            ("Qt", qVersion()),
         ]
         for row, (key, value) in enumerate(rows):
             key_label = QLabel(key)

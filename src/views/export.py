@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.config_manager import ConfigManager
-from ..widgets.cards import make_card
+from ..widgets.cards import make_card, make_field
 
 _ASPECT_RATIOS = ["16:9", "9:16", "1:1", "4:3", "21:9"]
 _RESOLUTIONS = ["2160p (4K)", "1440p (QHD)", "1080p (Full HD)", "720p (HD)", "480p (SD)"]
@@ -65,17 +65,17 @@ class ExportView(QWidget):
         self.aspect_combo = QComboBox()
         self.aspect_combo.setObjectName("SettingsCombo")
         self.aspect_combo.addItems(_ASPECT_RATIOS)
-        form.addWidget(self._field("Aspect Ratio", self.aspect_combo))
+        form.addWidget(make_field("Aspect Ratio", self.aspect_combo))
 
         self.resolution_combo = QComboBox()
         self.resolution_combo.setObjectName("SettingsCombo")
         self.resolution_combo.addItems(_RESOLUTIONS)
-        form.addWidget(self._field("Resolution", self.resolution_combo))
+        form.addWidget(make_field("Resolution", self.resolution_combo))
 
         self.codec_combo = QComboBox()
         self.codec_combo.setObjectName("SettingsCombo")
         self.codec_combo.addItems(_CODECS)
-        form.addWidget(self._field("Codec", self.codec_combo))
+        form.addWidget(make_field("Codec", self.codec_combo))
         outer.addWidget(make_card("Format", format_widget))
 
         # -- destination card -------------------------------------------------
@@ -88,7 +88,7 @@ class ExportView(QWidget):
         self.output_edit.setObjectName("SettingsEdit")
         self.output_edit.setText(str(self.config.get("output_folder", "output")))
         self.output_edit.setToolTip("Output destination (used by later phases)")
-        dest_form.addWidget(self._field("Output Folder", self.output_edit))
+        dest_form.addWidget(make_field("Output Folder", self.output_edit))
         outer.addWidget(make_card("Destination", dest_widget))
 
         # -- actions -----------------------------------------------------------
@@ -105,15 +105,3 @@ class ExportView(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(scroll)
-
-    @staticmethod
-    def _field(label_text: str, widget: QWidget) -> QWidget:
-        row = QWidget()
-        layout = QVBoxLayout(row)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-        label = QLabel(label_text)
-        label.setObjectName("FieldLabel")
-        layout.addWidget(label)
-        layout.addWidget(widget)
-        return row

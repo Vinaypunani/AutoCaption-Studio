@@ -1,0 +1,1 @@
+"""AutoCaption Studio tests."""

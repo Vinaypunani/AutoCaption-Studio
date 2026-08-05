@@ -80,11 +80,11 @@ class QueueView(QWidget):
         self.app_state.jobs_changed.connect(self._refresh)
         self._refresh()
 
-        # UI-only demo: advance running jobs so the progress animation is visible.
+        # UI-only demo: advance running jobs so the progress animation is
+        # visible. Runs only while the Queue page is on screen.
         self._demo_timer = QTimer(self)
         self._demo_timer.setInterval(250)
         self._demo_timer.timeout.connect(self._tick_progress)
-        self._demo_timer.start()
 
     # -- lifecycle ---------------------------------------------------------
     def showEvent(self, event) -> None:  # noqa: N802 (Qt naming)
@@ -92,6 +92,11 @@ class QueueView(QWidget):
         if not self._seeded:
             self._seeded = True
             self._load_sample_data()
+        self._demo_timer.start()
+
+    def hideEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        super().hideEvent(event)
+        self._demo_timer.stop()
 
     # -- actions -----------------------------------------------------------
     def _load_sample_data(self) -> None:
