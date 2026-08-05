@@ -44,15 +44,28 @@ LOG_FILE_PATH = LOGS_DIR / "application.log"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 TEMP_DIR = PROJECT_ROOT / "temp"
 
+# Phase 2 working directories (created by FileManager on startup).
+THUMBNAILS_DIR = TEMP_DIR / "thumbnails"
+AUDIO_DIR = TEMP_DIR / "audio"
+WORKING_DIR = TEMP_DIR / "working"
+
+# Thumbnail / audio conventions.
+THUMBNAIL_EXT = ".jpg"
+AUDIO_EXT = ".wav"
+AUDIO_SAMPLE_RATE = 16000  # Whisper-compatible (Phase 3)
+BLACK_FRAME_THRESHOLD = 16.0  # mean luminance below this counts as black
+
 # ---------------------------------------------------------------------------
-# Video file support (Phase 1: detection only — no processing)
+# Video file support (Phase 2: validation accepts exactly these formats)
 # ---------------------------------------------------------------------------
-SUPPORTED_VIDEO_EXTS = {
-    ".mp4", ".mkv", ".mov", ".avi", ".webm", ".flv", ".wmv",
-    ".m4v", ".mpg", ".mpeg", ".3gp", ".ts", ".ogv",
-}
+SUPPORTED_VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
 
 SUPPORTED_VIDEO_FILTER = "Video files (" + " ".join(f"*{ext}" for ext in sorted(SUPPORTED_VIDEO_EXTS)) + ")"
+
+# Default ffmpeg/ffprobe lookup order: explicit path > FFMPEG_PATH env var >
+# PATH > imageio-ffmpeg bundled binary (used by FFmpegManager).
+FFMPEG_ENV_VAR = "FFMPEG_PATH"
+FFPROBE_ENV_VAR = "FFPROBE_PATH"
 
 # ---------------------------------------------------------------------------
 # Defaults

@@ -1,6 +1,6 @@
 """Job model: construction, formatting and sample data."""
 
-from src.models.job_model import Job, JobStatus, format_mmss, sample_jobs
+from src.models.job_model import Job, JobStatus, ProcessStage, format_mmss, sample_jobs
 
 
 def test_format_mmss():
@@ -50,4 +50,38 @@ def test_job_serialization_roundtrip():
     assert data["filename"] == "clip.mp4"
     assert data["status"] == "completed"
     assert data["progress"] == 100.0
+    assert data["stage"] == "Waiting"
+    assert data["metadata"] is None
+    assert data["demo"] is False
     assert "created_at" in data
+
+
+def test_job_phase2_defaults():
+    job = Job(filename="clip.mp4")
+    assert job.stage is ProcessStage.WAITING
+    assert job.thumbnail_path == ""
+    assert job.audio_path == ""
+    assert job.error == ""
+    assert job.demo is False
+
+
+def test_sample_jobs_are_demo():
+    assert all(job.demo for job in sample_jobs())
+
+
+def test_job_serializes_metadata():
+    from src.video.metadata import VideoMetadata
+
+    meta = VideoMetadata(filename="clip.mp4", extension=".mp4", path="C:/clip.mp4", duration_sec=12.5)
+    job = Job(filename="clip.mp4", path="C:/clip.mp4", stage=ProcessStage.READY, metadata=meta, progress=100.0)
+    data = job.to_dict()
+    assert data["stage"] == "Ready"
+    assert data["metadata"]["duration_sec"] == 12.5
+
+
+def test_job_duration_uses_metadata():
+    from src.video.metadata import VideoMetadata
+
+    meta = VideoMetadata(filename="clip.mp4", extension=".mp4", path="C:/clip.mp4", duration_sec=125)
+    job = Job(filename="clip.mp4", path="C:/clip.mp4", metadata=meta)
+    assert job.duration_display() == "02:05"

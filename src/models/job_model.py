@@ -1,7 +1,8 @@
 """Job data model — plain data, zero processing logic.
 
-Later phases attach real pipeline state (transcription, subtitle files,
-FFmpeg progress) to this same model.
+Phase 2 extends jobs with a processing :class:`ProcessStage`, extracted
+:class:`VideoMetadata`, and the thumbnail/audio artifacts produced by the
+pipeline. The pipeline itself lives in ``services/video_service.py``.
 """
 
 from __future__ import annotations
@@ -11,10 +12,13 @@ import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import Optional
+
+from ..video.metadata import VideoMetadata
 
 
 class JobStatus(str, Enum):
-    """Lifecycle states of a caption job."""
+    """Lifecycle state of a job (coarse)."""
 
     WAITING = "waiting"
     RUNNING = "running"
@@ -24,6 +28,18 @@ class JobStatus(str, Enum):
     @property
     def display(self) -> str:
         return self.value.title()
+
+
+class ProcessStage(str, Enum):
+    """Fine-grained progress stage of the Phase 2 pipeline."""
+
+    WAITING = "Waiting"
+    VALIDATING = "Validating"
+    READING_METADATA = "Reading Metadata"
+    GENERATING_THUMBNAIL = "Generating Thumbnail"
+    EXTRACTING_AUDIO = "Extracting Audio"
+    READY = "Ready"
+    FAILED = "Failed"
 
 
 def format_mmss(total_seconds: float | int) -> str:
@@ -38,7 +54,7 @@ def format_mmss(total_seconds: float | int) -> str:
 
 @dataclass
 class Job:
-    """A single queued caption job (data only — no processing)."""
+    """A single caption job (data only — processing happens in the service)."""
 
     filename: str
     path: str = ""
@@ -49,13 +65,24 @@ class Job:
     job_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     created_at: datetime.datetime = field(default_factory=datetime.datetime.now)
 
+    # -- Phase 2 ------------------------------------------------------------
+    stage: ProcessStage = ProcessStage.WAITING
+    metadata: Optional[VideoMetadata] = None
+    thumbnail_path: str = ""
+    audio_path: str = ""
+    error: str = ""
+    demo: bool = False  # True = sample/mock job (no real file)
+
     @classmethod
     def from_path(cls, path: str | Path, status: JobStatus = JobStatus.WAITING) -> "Job":
-        """Build a waiting job from a video file path (no metadata probing yet)."""
+        """Build a waiting job from a video file path (no probing yet)."""
         path_obj = Path(path)
         return cls(filename=path_obj.name, path=str(path_obj), status=status)
 
+    # -- display helpers ------------------------------------------------------
     def duration_display(self) -> str:
+        if self.metadata and self.metadata.duration_sec:
+            return format_mmss(self.metadata.duration_sec)
         return format_mmss(self.duration_sec) if self.duration_sec > 0 else "—"
 
     def eta_display(self) -> str:
@@ -63,6 +90,10 @@ class Job:
             return "—"
         return format_mmss(self.eta_seconds)
 
+    def stage_display(self) -> str:
+        return self.stage.value
+
+    # -- serialization ---------------------------------------------------------
     def to_dict(self) -> dict:
         """Serialize for future persistence (e.g. resuming a session)."""
         return {
@@ -74,47 +105,59 @@ class Job:
             "duration_sec": self.duration_sec,
             "eta_seconds": self.eta_seconds,
             "created_at": self.created_at.isoformat(),
+            "stage": self.stage.value,
+            "metadata": self.metadata.to_dict() if self.metadata else None,
+            "thumbnail_path": self.thumbnail_path,
+            "audio_path": self.audio_path,
+            "error": self.error,
+            "demo": self.demo,
         }
 
 
 def sample_jobs() -> list[Job]:
-    """Return representative mock jobs for the Phase 1 queue demo."""
+    """Return representative mock jobs for the UI demo (all ``demo=True``)."""
     now = datetime.datetime.now()
     return [
         Job(
             filename="interview_podcast.mp4",
             path="C:/samples/interview_podcast.mp4",
             status=JobStatus.RUNNING,
+            stage=ProcessStage.EXTRACTING_AUDIO,
             progress=42.0,
             duration_sec=52 * 60,
             eta_seconds=31 * 60,
+            demo=True,
             created_at=now - datetime.timedelta(minutes=3),
         ),
         Job(
             filename="tutorial_screencast.mkv",
             path="C:/samples/tutorial_screencast.mkv",
             status=JobStatus.WAITING,
+            stage=ProcessStage.WAITING,
             progress=0.0,
             duration_sec=18 * 60,
-            eta_seconds=0,
+            demo=True,
             created_at=now - datetime.timedelta(minutes=1),
         ),
         Job(
             filename="product_launch_video.mp4",
             path="C:/samples/product_launch_video.mp4",
             status=JobStatus.COMPLETED,
+            stage=ProcessStage.READY,
             progress=100.0,
             duration_sec=2 * 60 + 5,
-            eta_seconds=0,
+            demo=True,
             created_at=now - datetime.timedelta(hours=2),
         ),
         Job(
             filename="old_broadcast_capture.avi",
             path="C:/samples/old_broadcast_capture.avi",
             status=JobStatus.FAILED,
+            stage=ProcessStage.FAILED,
             progress=63.0,
             duration_sec=1 * 3600 + 12 * 60 + 30,
-            eta_seconds=0,
+            error="Sample failure for demo purposes",
+            demo=True,
             created_at=now - datetime.timedelta(days=1),
         ),
     ]

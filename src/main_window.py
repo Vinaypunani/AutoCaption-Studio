@@ -51,12 +51,14 @@ class MainWindow(QMainWindow):
         config: ConfigManager,
         app_state: AppState,
         theme_service: ThemeService,
+        video_service=None,  # services.video_service.VideoService (optional)
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.config = config
         self.app_state = app_state
         self.theme_service = theme_service
+        self.video_service = video_service
 
         self._drag_mode: Optional[str] = None
         self._drag_start_global = QPoint()
@@ -102,8 +104,8 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         self.pages: dict[str, QWidget] = {
-            "home": HomeView(self.app_state, self.theme_service, self.config),
-            "queue": QueueView(self.app_state),
+            "home": HomeView(self.app_state, self.theme_service, self.config, self.video_service),
+            "queue": QueueView(self.app_state, self.video_service),
             "settings": SettingsView(self.app_state, self.theme_service, self.config),
             "export": ExportView(self.config),
             "about": AboutView(),
@@ -287,6 +289,8 @@ class MainWindow(QMainWindow):
             "maximized": self.isMaximized(),
         })
         self.config.save()
+        if self.video_service is not None:
+            self.video_service.shutdown()
         log.info("Application closing; window geometry saved")
         app = QApplication.instance()
         if app is not None:

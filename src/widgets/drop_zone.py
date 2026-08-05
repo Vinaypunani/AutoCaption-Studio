@@ -63,7 +63,7 @@ class DropZone(QFrame):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        hint = QLabel("MP4 · MKV · MOV · AVI · WebM · more — or click to browse")
+        hint = QLabel("MP4 · MOV · AVI · MKV · WebM · M4V — or click to browse")
         hint.setObjectName("DropZoneHint")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(hint)

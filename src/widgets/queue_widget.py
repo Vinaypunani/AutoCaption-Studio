@@ -1,8 +1,8 @@
 """Reusable job queue widget.
 
-Renders the job queue as a compact list (or table-like grid with a header)
-and updates rows incrementally so progress changes never rebuild the UI.
-Used both on the Home page (mini preview) and the Queue page (full table).
+Renders the job queue as a table-like list with stage chips, progress and
+ETA, updates rows incrementally, and supports selecting a row so detail
+panels (video info + preview) can follow the selection.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..models.job_model import Job, JobStatus
+from ..models.job_model import Job, JobStatus, ProcessStage
 from .progress_widget import ProgressWidget
 
 _COL_FILE = 0
@@ -27,31 +27,45 @@ _COL_PROGRESS = 2
 _COL_ETA = 3
 _COL_REMOVE = 4
 
-_STATUS_COLORS: dict[JobStatus, str] = {
-    JobStatus.WAITING: "waiting",
-    JobStatus.RUNNING: "running",
-    JobStatus.COMPLETED: "completed",
-    JobStatus.FAILED: "failed",
+# Stage -> QSS chip colour key.
+_STAGE_CHIP_COLOR: dict[ProcessStage, str] = {
+    ProcessStage.WAITING: "waiting",
+    ProcessStage.VALIDATING: "running",
+    ProcessStage.READING_METADATA: "running",
+    ProcessStage.GENERATING_THUMBNAIL: "running",
+    ProcessStage.EXTRACTING_AUDIO: "running",
+    ProcessStage.READY: "completed",
+    ProcessStage.FAILED: "failed",
+}
+
+_WORK_STAGES = {
+    ProcessStage.VALIDATING,
+    ProcessStage.READING_METADATA,
+    ProcessStage.GENERATING_THUMBNAIL,
+    ProcessStage.EXTRACTING_AUDIO,
 }
 
 
 class JobRow(QFrame):
-    """One row of the queue: file, status chip, progress, ETA, remove."""
+    """One queue row: file, stage chip, progress, ETA, remove; clickable."""
 
-    remove_requested = Signal(str)  # job_id
+    remove_requested = Signal(str)   # job_id
+    job_selected = Signal(str)       # job_id
 
     def __init__(self, job: Job, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("JobRow")
         self.setFixedHeight(64)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._job = job
+        self._selected = False
 
         grid = QGridLayout(self)
         grid.setContentsMargins(14, 8, 10, 8)
         grid.setHorizontalSpacing(12)
         grid.setVerticalSpacing(0)
         grid.setColumnStretch(_COL_FILE, 1)
-        grid.setColumnMinimumWidth(_COL_STATUS, 84)
+        grid.setColumnMinimumWidth(_COL_STATUS, 96)
         grid.setColumnMinimumWidth(_COL_PROGRESS, 140)
         grid.setColumnMinimumWidth(_COL_ETA, 64)
         grid.setColumnMinimumWidth(_COL_REMOVE, 28)
@@ -94,26 +108,52 @@ class JobRow(QFrame):
     def update_job(self, job: Job) -> None:
         """Refresh the row from a (possibly mutated) job."""
         self._job = job
-        self.name_label.setText(self._elide(job.filename, 280))
-        self.name_label.setToolTip(f"{job.filename}\n{job.path}" if job.path else job.filename)
+        self.name_label.setText(self._elide(job.filename, 260))
+        tooltip = f"{job.filename}\n{job.path}" if job.path else job.filename
+        if job.error:
+            tooltip += f"\n⚠ {job.error}"
+        self.name_label.setToolTip(tooltip)
         self.meta_label.setText(job.duration_display())
-        self.chip.setText(job.status.display)
-        self.chip.setProperty("status", _STATUS_COLORS.get(job.status, "waiting"))
+
+        chip_text = job.stage_display()
+        self.chip.setText(chip_text)
+        self.chip.setProperty("status", _STAGE_CHIP_COLOR.get(job.stage, "waiting"))
         self.chip.style().unpolish(self.chip)
         self.chip.style().polish(self.chip)
+
         self.progress.set_value(job.progress)
-        self.progress.set_indeterminate(job.status is JobStatus.RUNNING)
-        if job.status is JobStatus.RUNNING:
+        is_working = job.stage in _WORK_STAGES and job.status is JobStatus.RUNNING
+        self.progress.set_indeterminate(is_working)
+        if is_working:
             self.progress.start_animation()
         else:
             self.progress.stop_animation()
+
         self.eta_label.setText(job.eta_display())
 
     def job(self) -> Job:
         return self._job
 
+    def set_selected(self, selected: bool) -> None:
+        if selected != self._selected:
+            self._selected = selected
+            self.setProperty("selected", selected)
+            self.style().unpolish(self)
+            self.style().polish(self)
+
+    def is_selected(self) -> bool:
+        return self._selected
+
+    # -- interaction --------------------------------------------------------
+    def mousePressEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.job_selected.emit(self._job.job_id)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    # -- helpers ---------------------------------------------------------------
     def _elide(self, text: str, max_width: int) -> str:
-        """Elide long names in the middle; the full name stays in the tooltip."""
         metrics = self.fontMetrics()
         if metrics.horizontalAdvance(text) <= max_width:
             return text
@@ -124,10 +164,12 @@ class QueueWidget(QWidget):
     """Scrollable job queue with an optional table-style header."""
 
     remove_requested = Signal(str)  # job_id
+    job_selected = Signal(str)      # job_id
 
     def __init__(self, show_header: bool = True, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._rows: dict[str, JobRow] = {}
+        self._selected_id: str = ""
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -163,20 +205,20 @@ class QueueWidget(QWidget):
         grid.setContentsMargins(14, 2, 10, 2)
         grid.setHorizontalSpacing(12)
         grid.setColumnStretch(_COL_FILE, 1)
-        grid.setColumnMinimumWidth(_COL_STATUS, 84)
+        grid.setColumnMinimumWidth(_COL_STATUS, 96)
         grid.setColumnMinimumWidth(_COL_PROGRESS, 140)
         grid.setColumnMinimumWidth(_COL_ETA, 64)
         grid.setColumnMinimumWidth(_COL_REMOVE, 28)
         for col, text in [
             (_COL_FILE, "File"),
-            (_COL_STATUS, "Status"),
+            (_COL_STATUS, "Stage"),
             (_COL_PROGRESS, "Progress"),
             (_COL_ETA, "ETA"),
             (_COL_REMOVE, ""),
         ]:
             label = QLabel(text)
             label.setObjectName("QueueHeaderLabel")
-            if col == _COL_STATUS or col == _COL_ETA:
+            if col in (_COL_STATUS, _COL_ETA):
                 label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             grid.addWidget(label, 0, col)
         return header
@@ -198,7 +240,15 @@ class QueueWidget(QWidget):
             self._list_layout.removeWidget(row)
             row.deleteLater()
 
+        if self._selected_id not in ids:
+            self._selected_id = ""
+        for row in self._rows.values():
+            row.set_selected(row.job().job_id == self._selected_id)
+
         self._empty_label.setVisible(not jobs)
+
+    def selected_job_id(self) -> str:
+        return self._selected_id
 
     def job_count(self) -> int:
         return len(self._rows)
@@ -206,5 +256,12 @@ class QueueWidget(QWidget):
     def _add_row(self, job: Job) -> None:
         row = JobRow(job)
         row.remove_requested.connect(self.remove_requested)
+        row.job_selected.connect(self._on_row_selected)
         self._rows[job.job_id] = row
         self._list_layout.insertWidget(self._list_layout.count() - 1, row)
+
+    def _on_row_selected(self, job_id: str) -> None:
+        self._selected_id = job_id
+        for row in self._rows.values():
+            row.set_selected(row.job().job_id == job_id)
+        self.job_selected.emit(job_id)

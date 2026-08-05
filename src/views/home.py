@@ -1,8 +1,9 @@
 """Home page.
 
-Composition of the Phase 1 dashboard: drop zone, current project,
-recent files, quick settings and a preview of the job queue. Dropped
-files are queued as *waiting* jobs — nothing is processed.
+Phase 2 behaviour: dropped videos are validated immediately (unsupported
+formats get a clear message) and queued; the pipeline service then extracts
+metadata, generates a thumbnail and extracts audio. The Video Information
+panel shows the latest processed video's details.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QScrollArea,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -28,9 +30,11 @@ from ..core.constants import SUPPORTED_VIDEO_FILTER
 from ..core.logger import get_logger
 from ..models.job_model import Job
 from ..services.theme_service import ThemeService
+from ..video.validator import is_supported_extension
 from ..widgets.cards import make_card, make_field
 from ..widgets.drop_zone import DropZone
 from ..widgets.queue_widget import QueueWidget
+from ..widgets.video_info import VideoInfoPanel
 
 log = get_logger("home")
 
@@ -45,15 +49,22 @@ class HomeView(QWidget):
         app_state: AppState,
         theme_service: ThemeService,
         config: ConfigManager,
+        video_service=None,  # services.video_service.VideoService (optional)
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.app_state = app_state
         self.theme_service = theme_service
         self.config = config
+        self.video_service = video_service
         self.setObjectName("HomeView")
 
-        outer = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        body = QWidget()
+        outer = QVBoxLayout(body)
         outer.setContentsMargins(24, 20, 24, 20)
         outer.setSpacing(14)
 
@@ -62,8 +73,8 @@ class HomeView(QWidget):
         outer.addWidget(title)
 
         subtitle = QLabel(
-            "Drop a video to queue it. Caption generation arrives in a later phase — "
-            "this build is the application shell only."
+            "Drop a video to validate it, extract metadata, generate a thumbnail "
+            "and prepare its audio. Caption generation arrives in Phase 3."
         )
         subtitle.setObjectName("PageSubtitle")
         subtitle.setWordWrap(True)
@@ -92,14 +103,13 @@ class HomeView(QWidget):
         # -- recent files + quick settings ----------------------------------
         side_row = QHBoxLayout()
         side_row.setSpacing(14)
-
-        recent_widget = self._build_recent_files()
-        side_row.addWidget(recent_widget, 1)
-
-        quick_widget = self._build_quick_settings()
-        side_row.addWidget(quick_widget, 1)
-
+        side_row.addWidget(self._build_recent_files(), 1)
+        side_row.addWidget(self._build_quick_settings(), 1)
         outer.addLayout(side_row)
+
+        # -- video information (latest processed video) ---------------------
+        self.video_info = VideoInfoPanel()
+        outer.addWidget(self.video_info)
 
         # -- recent jobs preview --------------------------------------------
         self.mini_queue = QueueWidget(show_header=False)
@@ -125,7 +135,11 @@ class HomeView(QWidget):
         jobs_layout.addLayout(footer)
 
         outer.addWidget(make_card("Recent Jobs", jobs_card))
-        outer.addStretch(1)
+
+        scroll.setWidget(body)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(scroll)
 
         self._connect_state()
 
@@ -171,7 +185,7 @@ class HomeView(QWidget):
 
         self.gpu_check = QCheckBox("Use GPU acceleration")
         self.gpu_check.setChecked(bool(self.config.get("gpu", True)))
-        self.gpu_check.setToolTip("Reserved for later phases")
+        self.gpu_check.setToolTip("Reserved for Phase 3 captioning")
         self.gpu_check.toggled.connect(lambda checked: self._save_quick("gpu", checked))
         layout.addWidget(self.gpu_check)
 
@@ -186,9 +200,13 @@ class HomeView(QWidget):
     # -- state wiring ------------------------------------------------------
     def _connect_state(self) -> None:
         self.app_state.recent_files_changed.connect(lambda _files: self._refresh_recent_files())
-        self.app_state.jobs_changed.connect(self._refresh_jobs)
+        self.app_state.jobs_changed.connect(self._refresh_state)
         self.app_state.theme_changed.connect(self._sync_theme_combo)
-        self._refresh_jobs()
+        self._refresh_state()
+
+    def _refresh_state(self) -> None:
+        self.mini_queue.set_jobs(self.app_state.jobs())
+        self._refresh_video_info()
 
     def _refresh_recent_files(self) -> None:
         self.recent_list.clear()
@@ -198,8 +216,13 @@ class HomeView(QWidget):
             item = self.recent_list.item(self.recent_list.count() - 1)
             item.setToolTip(path)
 
-    def _refresh_jobs(self) -> None:
-        self.mini_queue.set_jobs(self.app_state.jobs())
+    def _refresh_video_info(self) -> None:
+        """Show the most recent job that has real metadata."""
+        for job in reversed(self.app_state.jobs()):
+            if job.metadata is not None:
+                self.video_info.set_metadata(job.metadata, job.thumbnail_path)
+                return
+        self.video_info.clear()
 
     def _sync_theme_combo(self, theme: str) -> None:
         self.theme_combo.blockSignals(True)
@@ -228,10 +251,32 @@ class HomeView(QWidget):
             self._on_files_dropped(files)
 
     def _on_files_dropped(self, paths: list[str]) -> None:
-        for index, path in enumerate(paths):
-            self.app_state.add_job(Job.from_path(path))
-            # Persist the recent-files list once, after the last path.
-            self.app_state.add_recent_file(path, persist=index == len(paths) - 1)
-        self.drop_zone.set_file_name(Path(paths[0]).name)
-        self.app_state.set_status(f"Queued {len(paths)} file(s) — captioning arrives in a later phase")
-        log.info("Accepted %d file(s) into the queue: %s", len(paths), paths)
+        accepted: list[str] = []
+        for path in paths:
+            if is_supported_extension(path):
+                accepted.append(path)
+            else:
+                log.warning("Rejected unsupported format: %s", path)
+                self.app_state.set_status(
+                    f"Unsupported video format: {Path(path).name}. "
+                    f"Supported: mp4, mov, avi, mkv, webm, m4v"
+                )
+
+        if not accepted:
+            return
+
+        can_process = self.video_service is not None and self.video_service.can_process()
+        for index, path in enumerate(accepted):
+            job = Job.from_path(path)
+            self.app_state.add_job(job)
+            self.app_state.add_recent_file(path, persist=index == len(accepted) - 1)
+            if can_process:
+                self.video_service.process_job(job.job_id)
+
+        self.drop_zone.set_file_name(Path(accepted[0]).name)
+        if can_process:
+            message = f"Queued {len(accepted)} file(s) for processing"
+        else:
+            message = f"Queued {len(accepted)} file(s) — FFmpeg not available, processing disabled"
+        self.app_state.set_status(message)
+        log.info("Accepted %d file(s) into the queue: %s", len(accepted), accepted)

@@ -369,6 +369,11 @@ QListWidget#RecentList::item:selected {
     border-color: #d7dae2;
 }
 
+#JobRow[selected="true"] {
+    background: rgba(79, 110, 247, 0.08);
+    border: 1px solid #4f6ef7;
+}
+
 #JobName {
     font-size: 13px;
     font-weight: 600;
@@ -475,6 +480,26 @@ QListWidget#RecentList::item:selected {
 #ProjectMeta {
     font-size: 12px;
     color: #6b7280;
+}
+
+/* --------------------------------------------------------------- preview */
+#PreviewPanel {
+    background: #f0f1f4;
+    border: 1px solid #e2e4ea;
+    border-radius: 10px;
+}
+
+#PreviewSurface {
+    background: #101014;
+    border-radius: 10px;
+}
+
+#ThumbLabel {
+    background: #f0f1f4;
+    border: 1px solid #e2e4ea;
+    border-radius: 8px;
+    font-size: 28px;
+    color: #a6abb5;
 }
 
 /* ------------------------------------------------------------- statusbar */

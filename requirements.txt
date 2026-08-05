@@ -1,7 +1,17 @@
-# AutoCaption Studio — Phase 1 (Desktop Application Foundation)
+# AutoCaption Studio — Phase 2 (Video Processing Engine)
 #
-# UI framework (Python 3.12+; wheels available for 3.13+)
+# UI framework. QtMultimedia (video preview) ships in PySide6-Addons, which
+# is pulled in by the PySide6 metapackage — on some Windows setups a short
+# venv path is required for installation (see README).
 PySide6>=6.8
+
+# Bundled FFmpeg binary (metadata, thumbnails, audio extraction). The app
+# prefers a system ffmpeg/ffprobe on PATH; this package is the fallback and
+# is required for tests to run without a system-wide FFmpeg install.
+imageio-ffmpeg>=0.5
+
+# Frame brightness analysis for "first meaningful frame" thumbnails.
+Pillow>=10
 
 # Development / testing
 #   pip install pytest
