@@ -8,13 +8,16 @@ video captions.
 - **Phase 2 — Video Processing Engine** (tag `v0.2.0-phase2`): real video
   validation, metadata, thumbnails, audio extraction and preview through a
   centralized FFmpeg wrapper.
-- **Phase 3 — AI Speech Recognition** *(current)*: Whisper transcription
-  with word-level timestamps, model management, hardware detection and
-  results storage.
-- **Phase 4+**: subtitle generation (SRT/ASS, karaoke), rendering, export.
+- **Phase 3 — AI Speech Recognition** (tag `v0.3.0-phase3`): Whisper
+  transcription with word-level timestamps, model management, hardware
+  detection and results storage.
+- **Phase 4 — Professional Subtitle Engine** *(current)*: SRT/ASS/VTT/JSON/TXT
+  export, smart line breaking, timing optimization, punctuation cleanup,
+  validation and live preview.
+- **Phase 5+**: caption themes, karaoke, rendering (burned-in captions).
 
-**Subtitle generation / rendering / export do not exist yet** — Phase 4
-plugs into the pipeline's `Subtitle Ready` / `Render Ready` stages.
+**Burned-in video rendering does not exist yet** — that's the rendering
+phase, wired into the pipeline's `Render Ready` stage.
 
 ---
 
@@ -64,7 +67,8 @@ AutoCaptionStudio/
 │   └── themes.json             # theme catalog (QSS + colors)
 ├── logs/application.log        # rotating log, created on every start
 ├── output/
-│   └── transcripts/            # ★ per-video JSON + TXT transcripts
+│   ├── transcripts/            # per-video JSON + TXT transcripts
+│   └── subtitles/              # ★ SRT / ASS / VTT / JSON / TXT exports
 ├── temp/
 │   ├── thumbnails/             # generated frame previews
 │   ├── audio/                  # extracted 16 kHz WAVs (Whisper-ready)
@@ -75,12 +79,14 @@ AutoCaptionStudio/
 │   └── light.qss
 ├── src/
 │   ├── core/                   # constants, logger, config_manager, app_state
-│   │   └── pipeline.py         # ★ job pipeline: ordered stages + runners
+│   │   └── pipeline.py         # job pipeline: ordered stages + runners
 │   ├── models/                 # job_model (Job, stages, sample data)
 │   ├── video/                  # Phase 2 engine (see below)
-│   ├── ai/whisper/             # ★ Phase 3 engine (see below)
+│   ├── ai/whisper/             # Phase 3 engine (see below)
+│   ├── subtitles/              # ★ Phase 4 engine (see below)
 │   ├── services/               # theme_service, video_service (pipeline),
-│   │                           # transcription_service (AI stage)
+│   │                           # transcription_service (AI stage),
+│   │                           # subtitle_service (subtitle stages)
 │   ├── widgets/                # sidebar, topbar, drop_zone, progress, queue,
 │   │                           # video_info, cards
 │   ├── views/                  # home, queue, settings, export, about
@@ -88,8 +94,8 @@ AutoCaptionStudio/
 ├── scripts/
 │   ├── generate_logo.py
 │   └── smoke_run.py            # headless end-to-end verification
-├── .github/workflows/tests.yml # ★ CI: full suite on push/PR
-└── tests/                      # 183 tests (offscreen Qt + real FFmpeg)
+├── .github/workflows/tests.yml # CI: full suite on push/PR
+└── tests/                      # 321 tests (offscreen Qt + real FFmpeg)
 ```
 
 ### Video engine (`src/video/`)
@@ -118,7 +124,45 @@ AutoCaptionStudio/
 | `worker.py`         | Standalone QThread wrapper (Preparing → … → Completed)  |
 | `exceptions.py`     | Typed errors: download, CUDA, OOM, empty audio, cancel… |
 
+### Subtitle engine (`src/subtitles/`)
+
+| Module                | Responsibility                                       |
+| --------------------- | ---------------------------------------------------- |
+| `subtitle_engine.py`  | Build pipeline + pluggable `SubtitleWriter` registry |
+| `srt/ass/vtt/json/txt_writer.py` | Format plugins (add TTML/SCC via `register_writer`) |
+| `line_breaker.py`     | Max chars/lines, phrases, punctuation/conjunction breaks |
+| `timing_optimizer.py` | Merge short, split long, gaps, overlaps, reading-speed stretch |
+| `punctuation.py`      | Capitalize, whitespace, punctuation restore, contractions, fillers |
+| `validator.py`        | Overlaps, negative durations, empty text, reading speed; auto-fix |
+| `preview_generator.py`| Pure-HTML caption preview (what the renderer will show) |
+| `subtitle_service.py` | Pipeline stages (`Subtitle Ready` → `Subtitle Validated`) + export |
+| `settings.py`         | `SubtitleSettings` persisted under `subtitles`       |
+| `exceptions.py`       | Typed errors: unsupported format, empty subtitles…   |
+
 ## Features
+
+### Phase 4 — Professional Subtitle Engine
+- **Multi-format export** — SRT, ASS, VTT, normalized JSON and TXT via a
+  plugin `SubtitleWriter` interface; adding TTML/SCC is one `register_writer`
+  call. Exports to `output/subtitles/` automatically and to any folder from
+  the Export page.
+- **Smart line breaking** — max chars/line, max lines/cue, phrase units kept
+  together, preferred breaks after punctuation and before conjunctions,
+  long-word overflow handling, and per-cue time distributed proportionally.
+- **Timing optimization** — merge very short cues, split very long ones,
+  minimum display durations, gap insertion, overlap correction and
+  reading-speed stretching into the following gap.
+- **Punctuation & cleanup** — capitalize sentences, normalize whitespace,
+  restore missing punctuation, optional contraction expansion and filler-word
+  removal (all toggleable).
+- **Validation** — typed issues for overlaps, empty captions, excessive
+  reading speed, over-long lines and too many lines, with mechanical auto-fix
+  (drop empties, clamp times, fix overlaps) and lenient/balanced/strict modes.
+- **Live preview** — the Queue detail panel renders captions exactly as they
+  will look (dark band, centred text) with a cue list; the Export page writes
+  any format for any transcribed job.
+- **Pipeline integration** — `Subtitle Ready` → `Subtitle Validated` stages
+  after transcription; warnings surface per job in the UI.
 
 ### Phase 3 — AI Speech Recognition
 - **Transcription** — Whisper (faster-whisper / CTranslate2) with
@@ -169,10 +213,10 @@ Light **MVVM-style** layering — each phase adds capabilities without
 touching the earlier shell:
 
 ```
-views (widgets)  →  services  →  engines (video / ai) → external tools
+views (widgets)  →  services  →  engines (video / ai / subtitles)
       ↓                ↓                 ↓
-  AppState         Pipeline         FFmpegManager / faster-whisper
-  (signals)    (core/pipeline.py)
+  AppState         Pipeline         FFmpegManager / faster-whisper /
+  (signals)    (core/pipeline.py)   SubtitleEngine (writer plugins)
       ↓
 core (config / logging / constants)
 ```
@@ -181,12 +225,15 @@ core (config / logging / constants)
   spawns media processes through `FFmpegManager`.
 - **`src/ai/whisper/`** isolates the ML dependency behind an engine
   protocol — tests inject a fake engine, the app uses faster-whisper.
+- **`src/subtitles/`** is pure Python with a pluggable writer registry —
+  formats are plugins, the engine never changes to add one.
 - **`VideoService`** runs one `QThread` worker per job; stage updates flow
   back through signals to `AppState`, which notifies the views.
-- **`TranscriptionService`** registers the transcription stage runner into
+- **`TranscriptionService` / `SubtitleService`** register stage runners into
   the same pipeline — retries, cancellations and future stages
-  (translation, speaker diarization, emoji) hang off the same structure.
-- Views never touch ffmpeg, files or models directly.
+  (translation, speaker diarization, karaoke, rendering) hang off the same
+  structure.
+- Views never touch ffmpeg, files, models or subtitle writers directly.
 
 ## Configuration
 
@@ -212,6 +259,25 @@ Example:
         "language": "en",
         "threads": 0,
         "auto_transcribe": true
+    },
+    "subtitles": {
+        "default_format": "srt",
+        "auto_generate": true,
+        "max_chars_per_line": 42,
+        "max_lines": 2,
+        "reading_speed_cps": 21.0,
+        "timing_optimization": true,
+        "min_display_duration": 0.8,
+        "max_display_duration": 7.0,
+        "min_gap": 0.05,
+        "auto_punctuation": true,
+        "capitalize_sentences": true,
+        "expand_contractions": false,
+        "remove_fillers": false,
+        "keep_phrases": true,
+        "break_at_punctuation": true,
+        "break_at_conjunctions": true,
+        "validation_strictness": "balanced"
     }
 }
 ```
@@ -230,13 +296,14 @@ per-job `error` messages shown in the queue.
 
 ## Testing
 
-183 tests: startup, config persistence, navigation, drop-zone, models,
+321 tests: startup, config persistence, navigation, drop-zone, models,
 FFmpeg wrapper, validation, metadata, thumbnails, audio extraction, file
-manager, pipeline integration (real generated videos), **job pipeline
-(stages, progress weights, cancellation), AI result/settings/exceptions,
-model manager, language detection, chunked transcription (fake engine),
-transcript storage, transcription worker and service**. Run on every push /
-PR via `.github/workflows/tests.yml`.
+manager, pipeline integration (real generated videos), job pipeline (stages,
+progress weights, cancellation), the full AI engine (model manager, language
+detection, chunked transcription, worker, service), and the **subtitle engine
+(line breaking, punctuation, timing optimization, validation, all five
+writers, engine/plugin registry, preview generator, settings, pipeline
+service)**. Run on every push / PR via `.github/workflows/tests.yml`.
 
 ## Roadmap
 
@@ -244,8 +311,9 @@ PR via `.github/workflows/tests.yml`.
 | ----- | ------------------------------------------------------------ |
 | 1     | Application foundation *(tagged `v0.1.0-phase1`)*            |
 | 2     | Video processing engine *(tagged `v0.2.0-phase2`)*           |
-| 3     | AI speech recognition engine *(current, tag next)*           |
-| 4     | Subtitle generation (SRT/ASS), karaoke, rendering, export    |
+| 3     | AI speech recognition engine *(tagged `v0.3.0-phase3`)*      |
+| 4     | Professional subtitle engine *(current, tag next)*           |
+| 5     | Caption themes, karaoke animation, rendering, final export   |
 
 ## License
 

@@ -15,7 +15,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 APP_NAME = "AutoCaption Studio"
 APP_SLUG = "autocaption-studio"
-APP_VERSION = "0.1.0"  # Phase 1
+APP_VERSION = "0.4.0"  # Phase 4
 ORG_NAME = "AutoCaptionStudio"
 AUTHOR = "AutoCaption Studio Team"
 LICENSE = "MIT"
@@ -54,6 +54,10 @@ MODELS_DIR = PROJECT_ROOT / "models"
 TRANSCRIPTS_DIR = OUTPUT_DIR / "transcripts"
 TRANSCRIPT_JSON_EXT = ".json"
 TRANSCRIPT_TXT_EXT = ".txt"
+
+# Phase 4: subtitle output + supported export formats.
+SUBTITLES_DIR = OUTPUT_DIR / "subtitles"
+SUBTITLE_FORMATS = ("srt", "ass", "vtt", "json", "txt")
 
 # Thumbnail / audio conventions.
 THUMBNAIL_EXT = ".jpg"
@@ -94,6 +98,25 @@ DEFAULT_SETTINGS: dict = {
         "language": "en",
         "threads": 0,
         "auto_transcribe": True,
+    },
+    "subtitles": {
+        "default_format": "srt",
+        "auto_generate": True,
+        "max_chars_per_line": 42,
+        "max_lines": 2,
+        "reading_speed_cps": 21.0,
+        "timing_optimization": True,
+        "min_display_duration": 0.8,
+        "max_display_duration": 7.0,
+        "min_gap": 0.05,
+        "auto_punctuation": True,
+        "capitalize_sentences": True,
+        "expand_contractions": False,
+        "remove_fillers": False,
+        "keep_phrases": True,
+        "break_at_punctuation": True,
+        "break_at_conjunctions": True,
+        "validation_strictness": "balanced",
     },
 }
 

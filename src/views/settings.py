@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -26,8 +27,10 @@ from ..ai.whisper.model_manager import MODEL_CATALOG, detect_device
 from ..ai.whisper.settings import COMMON_LANGUAGES, ComputeType, DeviceType, LanguageMode, WhisperSettings
 from ..core.app_state import AppState
 from ..core.config_manager import ConfigManager
+from ..core.constants import SUBTITLE_FORMATS
 from ..core.logger import get_logger
 from ..services.theme_service import ThemeService
+from ..subtitles.settings import SubtitleSettings
 from ..widgets.cards import make_card, make_field
 
 log = get_logger("settings_view")
@@ -203,6 +206,75 @@ class SettingsView(QWidget):
         ai_form.addWidget(self.auto_transcribe_check)
         outer.addWidget(make_card("AI / Transcription", ai_widget))
 
+        # -- subtitles (Phase 4) --------------------------------------------------
+        sub_widget = QWidget()
+        sub_form = QVBoxLayout(sub_widget)
+        sub_form.setContentsMargins(0, 0, 0, 0)
+        sub_form.setSpacing(10)
+
+        row1 = QHBoxLayout()
+        row1.setSpacing(12)
+        self.subtitle_format_combo = QComboBox()
+        self.subtitle_format_combo.setObjectName("SettingsCombo")
+        for fmt in SUBTITLE_FORMATS:
+            self.subtitle_format_combo.addItem(fmt.upper(), fmt)
+        row1.addWidget(make_field("Default Subtitle Format", self.subtitle_format_combo), 1)
+        self.strictness_combo = QComboBox()
+        self.strictness_combo.setObjectName("SettingsCombo")
+        self.strictness_combo.addItems(["Lenient", "Balanced", "Strict"])
+        row1.addWidget(make_field("Validation Strictness", self.strictness_combo), 1)
+        sub_form.addLayout(row1)
+
+        row2 = QHBoxLayout()
+        row2.setSpacing(12)
+        self.max_chars_spin = QSpinBox()
+        self.max_chars_spin.setRange(10, 200)
+        self.max_chars_spin.setValue(42)
+        row2.addWidget(make_field("Max Chars / Line", self.max_chars_spin), 1)
+        self.max_lines_spin = QSpinBox()
+        self.max_lines_spin.setRange(1, 4)
+        self.max_lines_spin.setValue(2)
+        row2.addWidget(make_field("Max Lines / Cue", self.max_lines_spin), 1)
+        self.reading_speed_spin = QDoubleSpinBox()
+        self.reading_speed_spin.setRange(5.0, 60.0)
+        self.reading_speed_spin.setValue(21.0)
+        self.reading_speed_spin.setSuffix(" cps")
+        row2.addWidget(make_field("Reading Speed", self.reading_speed_spin), 1)
+        sub_form.addLayout(row2)
+
+        row3 = QHBoxLayout()
+        row3.setSpacing(12)
+        self.min_duration_spin = QDoubleSpinBox()
+        self.min_duration_spin.setRange(0.1, 5.0)
+        self.min_duration_spin.setValue(0.8)
+        self.min_duration_spin.setSingleStep(0.1)
+        self.min_duration_spin.setSuffix(" s")
+        row3.addWidget(make_field("Min Display Duration", self.min_duration_spin), 1)
+        self.max_duration_spin = QDoubleSpinBox()
+        self.max_duration_spin.setRange(1.0, 30.0)
+        self.max_duration_spin.setValue(7.0)
+        self.max_duration_spin.setSingleStep(0.5)
+        self.max_duration_spin.setSuffix(" s")
+        row3.addWidget(make_field("Max Display Duration", self.max_duration_spin), 1)
+        sub_form.addLayout(row3)
+
+        self.timing_optimization_check = QCheckBox("Timing optimization (merge/split/gaps)")
+        self.timing_optimization_check.setToolTip("Merge very short cues, split very long ones, keep minimum gaps")
+        sub_form.addWidget(self.timing_optimization_check)
+        self.auto_punctuation_check = QCheckBox("Auto punctuation & capitalization")
+        self.auto_punctuation_check.setToolTip("Restore missing punctuation and capitalize sentences")
+        sub_form.addWidget(self.auto_punctuation_check)
+        self.capitalize_check = QCheckBox("Capitalize sentences")
+        sub_form.addWidget(self.capitalize_check)
+        self.expand_contractions_check = QCheckBox("Expand contractions (don't → do not)")
+        sub_form.addWidget(self.expand_contractions_check)
+        self.remove_fillers_check = QCheckBox("Remove filler words (um, uh, er…)")
+        sub_form.addWidget(self.remove_fillers_check)
+        self.auto_generate_subtitles_check = QCheckBox("Auto-generate subtitles after transcription")
+        self.auto_generate_subtitles_check.setToolTip("Runs the subtitle stages for every transcribed job")
+        sub_form.addWidget(self.auto_generate_subtitles_check)
+        outer.addWidget(make_card("Subtitles (Phase 4)", sub_widget))
+
         # -- updates -----------------------------------------------------------
         updates = QWidget()
         u_form = QVBoxLayout(updates)
@@ -257,6 +329,22 @@ class SettingsView(QWidget):
         channel = str(self.config.get("update_channel", "stable"))
         self.channel_combo.setCurrentText(channel.title())
 
+        subtitles = SubtitleSettings.from_config(self.config)
+        index = self.subtitle_format_combo.findData(subtitles.default_format)
+        self.subtitle_format_combo.setCurrentIndex(max(0, index))
+        self.strictness_combo.setCurrentText(subtitles.validation_strictness.title())
+        self.max_chars_spin.setValue(subtitles.max_chars_per_line)
+        self.max_lines_spin.setValue(subtitles.max_lines)
+        self.reading_speed_spin.setValue(subtitles.reading_speed_cps)
+        self.min_duration_spin.setValue(subtitles.min_display_duration)
+        self.max_duration_spin.setValue(subtitles.max_display_duration)
+        self.timing_optimization_check.setChecked(subtitles.timing_optimization)
+        self.auto_punctuation_check.setChecked(subtitles.auto_punctuation)
+        self.capitalize_check.setChecked(subtitles.capitalize_sentences)
+        self.expand_contractions_check.setChecked(subtitles.expand_contractions)
+        self.remove_fillers_check.setChecked(subtitles.remove_fillers)
+        self.auto_generate_subtitles_check.setChecked(subtitles.auto_generate)
+
         whisper = WhisperSettings.from_config(self.config)
         index = self.model_combo.findData(whisper.model)
         self.model_combo.setCurrentIndex(max(0, index))
@@ -303,6 +391,24 @@ class SettingsView(QWidget):
         )
         whisper.validate()
         whisper.save_to_config(self.config)
+
+        subtitles = SubtitleSettings(
+            default_format=self.subtitle_format_combo.currentData() or "srt",
+            auto_generate=self.auto_generate_subtitles_check.isChecked(),
+            max_chars_per_line=self.max_chars_spin.value(),
+            max_lines=self.max_lines_spin.value(),
+            reading_speed_cps=self.reading_speed_spin.value(),
+            timing_optimization=self.timing_optimization_check.isChecked(),
+            min_display_duration=self.min_duration_spin.value(),
+            max_display_duration=self.max_duration_spin.value(),
+            auto_punctuation=self.auto_punctuation_check.isChecked(),
+            capitalize_sentences=self.capitalize_check.isChecked(),
+            expand_contractions=self.expand_contractions_check.isChecked(),
+            remove_fillers=self.remove_fillers_check.isChecked(),
+            validation_strictness=self.strictness_combo.currentText().lower(),
+        )
+        subtitles.validate()
+        subtitles.save_to_config(self.config)
         self.config.save()
         self.app_state.set_theme(theme, persist=False)
         self.app_state.set_status("Settings saved to config/settings.json")

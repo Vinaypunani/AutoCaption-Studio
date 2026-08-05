@@ -11,9 +11,9 @@
     "window": {
         "width": 1280,
         "height": 800,
+        "maximized": false,
         "x": 320,
-        "y": 116,
-        "maximized": false
+        "y": 116
     },
     "whisper": {
         "model": "tiny",
@@ -24,5 +24,24 @@
         "language": "en",
         "threads": 0,
         "auto_transcribe": true
+    },
+    "subtitles": {
+        "default_format": "srt",
+        "auto_generate": true,
+        "max_chars_per_line": 42,
+        "max_lines": 2,
+        "reading_speed_cps": 21.0,
+        "timing_optimization": true,
+        "min_display_duration": 0.8,
+        "max_display_duration": 7.0,
+        "min_gap": 0.05,
+        "auto_punctuation": true,
+        "capitalize_sentences": true,
+        "expand_contractions": false,
+        "remove_fillers": false,
+        "keep_phrases": true,
+        "break_at_punctuation": true,
+        "break_at_conjunctions": true,
+        "validation_strictness": "balanced"
     }
 }

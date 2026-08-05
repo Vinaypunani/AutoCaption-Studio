@@ -126,7 +126,11 @@ class FasterWhisperEngine(TranscriptionEngine):
     def detect_language(self, audio: Any) -> tuple[str, float]:
         if self._model is None:
             raise TranscriptionError("Model not loaded")
-        language, probability = self._model.detect_language(audio)
+        result = self._model.detect_language(audio)
+        # faster-whisper 1.2+ returns (language, probability, all_probs);
+        # older releases return (language, probability). Accept both.
+        language = result[0]
+        probability = result[1]
         return str(language), float(probability)
 
     def transcribe(

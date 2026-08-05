@@ -1,9 +1,9 @@
-"""Headless smoke run for AutoCaption Studio (Phase 2).
+"""Headless smoke run for AutoCaption Studio (Phase 4).
 
 Boots the complete application offscreen, runs the real media pipeline on a
-generated test video (validate → metadata → thumbnail → audio), exercises
-navigation and theme switching, and writes preview images to
-``output/preview_*.png``.
+generated test video, exercises navigation and theme switching, generates
+subtitles from a canned transcript (no model download) and writes preview
+images to ``output/preview_*.png``.
 
 Usage:  python scripts/smoke_run.py
 """
@@ -25,16 +25,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from src.ai.whisper.result import Segment, TranscriptResult  # noqa: E402
+from src.ai.whisper.settings import WhisperSettings  # noqa: E402
 from src.core.app_state import AppState  # noqa: E402
 from src.core.config_manager import ConfigManager  # noqa: E402
 from src.core.constants import APP_NAME, LOG_FILE_PATH, OUTPUT_DIR  # noqa: E402
 from src.core.logger import get_logger, setup_logging  # noqa: E402
+from src.core.pipeline import PipelineContext  # noqa: E402
 from src.main_window import MainWindow  # noqa: E402
 from src.models.job_model import Job, JobStatus  # noqa: E402
-from src.ai.whisper.settings import WhisperSettings  # noqa: E402
 from src.services.theme_service import ThemeService  # noqa: E402
 from src.services.transcription_service import TranscriptionService  # noqa: E402
 from src.services.video_service import VideoService  # noqa: E402
+from src.subtitles.settings import SubtitleSettings  # noqa: E402
+from src.subtitles.subtitle_service import SubtitleService  # noqa: E402
 from src.video import FFmpegManager, FileManager  # noqa: E402
 
 PAGES = ["home", "queue", "settings", "export", "about"]
@@ -64,12 +68,15 @@ def main() -> int:
     app = QApplication(sys.argv)
 
     config = ConfigManager()
-    # Keep the smoke run deterministic: disable the transcription stage so it
-    # never tries to download a Whisper model (transcription itself is
-    # covered by the unit/integration test suite with fake engines).
+    # Keep the smoke run deterministic: disable the transcription/subtitle
+    # stages so nothing downloads a Whisper model or needs a transcript
+    # (both are covered by the unit/integration suite with fakes).
     whisper = WhisperSettings.from_config(config).to_dict()
     whisper["auto_transcribe"] = False
     config.set("whisper", whisper)
+    subtitle_cfg = SubtitleSettings.from_config(config).to_dict()
+    subtitle_cfg["auto_generate"] = False
+    config.set("subtitles", subtitle_cfg)
 
     app_state = AppState(config)
     theme_service = ThemeService()
@@ -77,10 +84,12 @@ def main() -> int:
     file_manager = FileManager()
     transcription_service = TranscriptionService(config)
     assert transcription_service.enabled() is False, "smoke run must not auto-download models"
-    video_service = VideoService(app_state, ffmpeg, file_manager, transcription_service)
+    subtitle_service = SubtitleService(config)
+    assert subtitle_service.enabled() is False, "smoke run must not need transcripts"
+    video_service = VideoService(app_state, ffmpeg, file_manager, transcription_service, subtitle_service)
     assert video_service.can_process(), "ffmpeg must be available for the smoke run"
 
-    window = MainWindow(config, app_state, theme_service, video_service)
+    window = MainWindow(config, app_state, theme_service, video_service, subtitle_service)
     window.show()
     window.resize(1280, 800)
     app.processEvents()
@@ -111,12 +120,42 @@ def main() -> int:
         app.processEvents()
     logger.info("Navigation across all pages OK")
 
-    # 3) Select the processed job on the queue page and render previews.
+    # 3) Phase 4: subtitle generation from a canned transcript (no model
+    #    download needed) — exercises the Subtitle Ready + Validated stages,
+    #    the writer plugins and the export path end-to-end.
+    transcript = TranscriptResult(
+        language="en",
+        duration=4.0,
+        segments=[
+            Segment(0.0, 1.2, "Hello and welcome to AutoCaption Studio."),
+            Segment(1.5, 2.4, "Subtitles are generated automatically."),
+            Segment(2.8, 4.0, "Export them in five professional formats."),
+        ],
+    )
+    sub_ctx = PipelineContext(job_id="smoke-sub", video_path=str(sample), filename=sample.name)
+    sub_ctx.transcript = transcript.to_dict()
+    subtitle_service.stage_runner()(sub_ctx)
+    subtitle_service.validation_runner()(sub_ctx)
+    assert sub_ctx.subtitle_path and Path(sub_ctx.subtitle_path).exists(), "subtitles were not generated"
+    assert len(sub_ctx.subtitle_formats) == 5, "expected all five formats"
+    logger.info("Subtitles generated: %s (warnings: %d)",
+                Path(sub_ctx.subtitle_path).name, len(sub_ctx.subtitle_warnings))
+
+    # Attach the artifacts to the app job so the queue page can preview them.
+    job.transcript = transcript.to_dict()
+    job.transcript_path = ""  # preview needs only the in-memory transcript
+    job.subtitle_path = sub_ctx.subtitle_path
+    job.subtitle_formats = sub_ctx.subtitle_formats
+    job.subtitle_warnings = sub_ctx.subtitle_warnings
+    app_state.jobs_changed.emit()
+
+    # 4) Select the processed job on the queue page and render previews.
     window.navigate("queue")
     app.processEvents()
     window.pages["queue"]._on_job_selected(job.job_id)
     app.processEvents()
-    window.grab().save(str(OUTPUT_DIR / "preview_queue_phase2.png"))
+    assert window.pages["queue"].subtitle_preview.cue_count() > 0, "subtitle preview is empty"
+    window.grab().save(str(OUTPUT_DIR / "preview_queue_phase4.png"))
 
     window.navigate("home")
     app.processEvents()
@@ -133,7 +172,7 @@ def main() -> int:
 
     logger.info("Smoke run finished; log file: %s", LOG_FILE_PATH)
     assert LOG_FILE_PATH.exists(), "log file was not created"
-    print("smoke run OK — Phase 3 app verified (media pipeline + UI); previews in output/")
+    print("smoke run OK — Phase 4 verified (pipeline + subtitles + preview); previews in output/")
     return 0
 
 

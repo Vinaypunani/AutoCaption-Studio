@@ -86,6 +86,9 @@ class _PipelineWorker(QThread):
         self.job.audio_path = self.ctx.audio_path
         self.job.transcript_path = self.ctx.transcript_path
         self.job.transcript = self.ctx.transcript
+        self.job.subtitle_path = self.ctx.subtitle_path
+        self.job.subtitle_formats = dict(self.ctx.subtitle_formats)
+        self.job.subtitle_warnings = list(self.ctx.subtitle_warnings)
 
     def _emit_progress(self, stage: PipelineStage, fraction: float) -> None:
         self.job.stage = stage
@@ -105,6 +108,7 @@ class VideoService(QObject):
         ffmpeg: Optional[FFmpegManager] = None,
         file_manager: Optional[FileManager] = None,
         transcription_service=None,  # services.transcription_service.TranscriptionService
+        subtitle_service=None,       # subtitles.subtitle_service.SubtitleService
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -112,6 +116,7 @@ class VideoService(QObject):
         self.ffmpeg = ffmpeg or FFmpegManager()
         self.file_manager = file_manager or FileManager()
         self.transcription_service = transcription_service
+        self.subtitle_service = subtitle_service
         self._workers: dict[str, _PipelineWorker] = {}  # job_id -> worker
         self._contexts: dict[str, PipelineContext] = {}  # job_id -> ctx
 
@@ -182,6 +187,9 @@ class VideoService(QObject):
                 self.transcription_service.stage_runner(),
                 weight=40,
             )
+        if self.subtitle_service is not None and self.subtitle_service.enabled():
+            pipeline.register(PipelineStage.SUBTITLE_READY, self.subtitle_service.stage_runner(), weight=2)
+            pipeline.register(PipelineStage.SUBTITLE_VALIDATED, self.subtitle_service.validation_runner(), weight=2)
         return pipeline
 
     # -- stage runners ----------------------------------------------------------

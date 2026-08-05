@@ -51,7 +51,8 @@ class MainWindow(QMainWindow):
         config: ConfigManager,
         app_state: AppState,
         theme_service: ThemeService,
-        video_service=None,  # services.video_service.VideoService (optional)
+        video_service=None,   # services.video_service.VideoService (optional)
+        subtitle_service=None,  # subtitles.subtitle_service.SubtitleService (optional)
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -59,6 +60,7 @@ class MainWindow(QMainWindow):
         self.app_state = app_state
         self.theme_service = theme_service
         self.video_service = video_service
+        self.subtitle_service = subtitle_service
 
         self._drag_mode: Optional[str] = None
         self._drag_start_global = QPoint()
@@ -105,9 +107,9 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.pages: dict[str, QWidget] = {
             "home": HomeView(self.app_state, self.theme_service, self.config, self.video_service),
-            "queue": QueueView(self.app_state, self.video_service),
+            "queue": QueueView(self.app_state, self.video_service, self.subtitle_service),
             "settings": SettingsView(self.app_state, self.theme_service, self.config),
-            "export": ExportView(self.config),
+            "export": ExportView(self.config, self.app_state, self.subtitle_service),
             "about": AboutView(),
         }
         for page_id in PAGE_ORDER:

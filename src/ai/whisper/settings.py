@@ -116,11 +116,12 @@ class WhisperSettings:
     # -- device resolution ---------------------------------------------------------
     def resolved_device(self, detected: str) -> str:
         """Resolve AUTO against a detected device (e.g. ``cpu``/``cuda``)."""
-        if self.device is DeviceType.AUTO:
+        device = self.device if isinstance(self.device, DeviceType) else DeviceType(str(self.device))
+        if device is DeviceType.AUTO:
             return detected if detected in ("cuda", "cpu") else "cpu"
-        if self.device in (DeviceType.DIRECTML, DeviceType.METAL):
-            return self.device.value  # reported as unsupported downstream
-        return self.device.value
+        if device in (DeviceType.DIRECTML, DeviceType.METAL):
+            return device.value  # reported as unsupported downstream
+        return device.value
 
     def with_defaults_filled(self, **overrides: Any) -> "WhisperSettings":
         return replace(self, **overrides)

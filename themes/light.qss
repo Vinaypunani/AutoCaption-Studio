@@ -507,6 +507,37 @@ QListWidget#RecentList::item:selected {
     color: #a6abb5;
 }
 
+/* ------------------------------------------------------------ subtitles */
+#SubtitleCueList {
+    background: #ffffff;
+    border: 1px solid #e2e4ea;
+    border-radius: 8px;
+    padding: 4px;
+    outline: 0;
+}
+
+#SubtitleCueList::item {
+    color: #3d424c;
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+#SubtitleCueList::item:hover {
+    background: #f0f2f5;
+    color: #16181d;
+}
+
+#SubtitleCueList::item:selected {
+    background: rgba(79, 110, 247, 0.14);
+    color: #2b3fd4;
+}
+
+#SubtitlePreviewBrowser {
+    background: #101014;
+    border: 1px solid #e2e4ea;
+    border-radius: 8px;
+}
+
 /* ------------------------------------------------------------- statusbar */
 #StatusBar {
     background: #ffffff;

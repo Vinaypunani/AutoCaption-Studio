@@ -67,6 +67,11 @@ class Job:
     transcript_path: str = ""  # JSON transcript under output/transcripts/
     transcript: Optional[dict] = None  # in-memory copy (also persisted to disk)
 
+    # -- Phase 4 ------------------------------------------------------------
+    subtitle_path: str = ""  # primary format file under output/subtitles/
+    subtitle_formats: dict = field(default_factory=dict)  # ext -> path
+    subtitle_warnings: list = field(default_factory=list)  # validator warnings
+
     @classmethod
     def from_path(cls, path: str | Path, status: JobStatus = JobStatus.WAITING) -> "Job":
         """Build a waiting job from a video file path (no probing yet)."""
@@ -113,6 +118,8 @@ class Job:
             "thumbnail_path": self.thumbnail_path,
             "audio_path": self.audio_path,
             "transcript_path": self.transcript_path,
+            "subtitle_path": self.subtitle_path,
+            "subtitle_warnings": list(self.subtitle_warnings),
             "error": self.error,
             "demo": self.demo,
         }

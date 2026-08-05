@@ -97,3 +97,10 @@ def test_resolved_device_explicit():
     assert WhisperSettings(device=DeviceType.CUDA).resolved_device("cpu") == "cuda"
     assert WhisperSettings(device=DeviceType.DIRECTML).resolved_device("cpu") == "directml"
     assert WhisperSettings(device=DeviceType.METAL).resolved_device("cpu") == "metal"
+
+
+def test_resolved_device_tolerates_string_values():
+    # Direct construction with a raw string (not DeviceType) must not crash.
+    assert WhisperSettings(device="auto").resolved_device("cpu") == "cpu"  # type: ignore[arg-type]
+    assert WhisperSettings(device="cuda").resolved_device("cpu") == "cuda"  # type: ignore[arg-type]
+    assert WhisperSettings(device="cpu").resolved_device("cuda") == "cpu"  # type: ignore[arg-type]

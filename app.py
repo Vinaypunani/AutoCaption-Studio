@@ -25,6 +25,7 @@ from src.services.theme_service import ThemeService
 from src.services.transcription_service import TranscriptionService
 from src.services.video_service import VideoService
 from src.ai.whisper.settings import WhisperSettings
+from src.subtitles.subtitle_service import SubtitleService
 from src.video import FFmpegManager, FileManager
 
 
@@ -58,7 +59,11 @@ def main() -> int:
     file_manager = FileManager()
     # Phase 3: speech recognition stage.
     transcription_service = TranscriptionService(config)
-    video_service = VideoService(app_state, ffmpeg, file_manager, transcription_service)
+    # Phase 4: subtitle generation / validation / export stages.
+    subtitle_service = SubtitleService(config)
+    video_service = VideoService(
+        app_state, ffmpeg, file_manager, transcription_service, subtitle_service
+    )
     if video_service.can_process():
         logger.info("FFmpeg available: %s", video_service.ffmpeg_version())
     else:
@@ -68,9 +73,14 @@ def main() -> int:
         "enabled" if transcription_service.enabled() else "disabled",
         WhisperSettings.from_config(config).model,
     )
+    logger.info(
+        "Subtitle engine: %s (formats: %s)",
+        "enabled" if subtitle_service.enabled() else "disabled",
+        ", ".join(subtitle_service.available_formats()),
+    )
 
     # --- window -------------------------------------------------------------
-    window = MainWindow(config, app_state, theme_service, video_service)
+    window = MainWindow(config, app_state, theme_service, video_service, subtitle_service)
     logger.info("Theme Loaded (%s)", app_state.theme())
     window.show()
     if window.is_startup_maximized():

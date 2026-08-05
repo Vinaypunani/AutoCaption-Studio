@@ -32,6 +32,7 @@ def test_pipeline_order_is_expected():
         "Audio Ready",
         "Transcription Ready",
         "Subtitle Ready",
+        "Subtitle Validated",
         "Render Ready",
         "Completed",
     ]

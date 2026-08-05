@@ -134,3 +134,42 @@ def test_manual_language_forwarded_to_engine(tmp_path, monkeypatch):
 
     transcriber.transcribe("C:/a.wav", _settings(language_mode=LanguageMode.MANUAL, language="de"))
     assert engine.calls[0]["language"] == "de"
+
+
+class _ThreeValueDetectModel:
+    """Mimics faster-whisper 1.2+ detect_language (3-tuple return)."""
+
+    def detect_language(self, audio):
+        return "en", 0.95, [("english", 0.95), ("spanish", 0.04)]
+
+
+class _TwoValueDetectModel:
+    """Mimics older faster-whisper detect_language (2-tuple return)."""
+
+    def detect_language(self, audio):
+        return "es", 0.87
+
+
+def test_engine_detect_language_handles_three_value_return():
+    from src.ai.whisper.transcriber import FasterWhisperEngine
+
+    engine = FasterWhisperEngine()
+    engine._model = _ThreeValueDetectModel()
+    assert engine.detect_language(b"audio") == ("en", 0.95)
+
+
+def test_engine_detect_language_handles_two_value_return():
+    from src.ai.whisper.transcriber import FasterWhisperEngine
+
+    engine = FasterWhisperEngine()
+    engine._model = _TwoValueDetectModel()
+    assert engine.detect_language(b"audio") == ("es", 0.87)
+
+
+def test_engine_detect_language_without_model_raises():
+    from src.ai.whisper.exceptions import TranscriptionError
+    from src.ai.whisper.transcriber import FasterWhisperEngine
+
+    engine = FasterWhisperEngine()
+    with pytest.raises(TranscriptionError, match="not loaded"):
+        engine.detect_language(b"audio")

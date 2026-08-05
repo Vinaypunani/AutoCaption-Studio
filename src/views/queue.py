@@ -22,12 +22,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..ai.whisper.result import TranscriptResult
 from ..core.app_state import AppState
 from ..core.logger import get_logger
 from ..models.job_model import JobStatus, ProcessStage
+from ..subtitles.settings import SubtitleSettings
 from ..video.preview import PreviewPanel
 from ..widgets.cards import make_card
 from ..widgets.queue_widget import QueueWidget
+from ..widgets.subtitle_preview import SubtitlePreview
 from ..widgets.video_info import VideoInfoPanel
 
 log = get_logger("queue_view")
@@ -36,11 +39,19 @@ log = get_logger("queue_view")
 class QueueView(QWidget):
     """Job queue page (scrollable so small windows never clip the detail panel)."""
 
-    def __init__(self, app_state: AppState, video_service=None, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        app_state: AppState,
+        video_service=None,
+        subtitle_service=None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.app_state = app_state
         self.video_service = video_service
+        self.subtitle_service = subtitle_service
         self._last_transcript_path = ""
+        self._last_subtitle_path = ""
         self.setObjectName("QueueView")
 
         scroll = QScrollArea()
@@ -142,6 +153,28 @@ class QueueView(QWidget):
         transcript_row.addWidget(self.open_transcript_button)
         detail_layout.addLayout(transcript_row)
 
+        # -- subtitle summary row ---------------------------------------------
+        subtitle_row = QHBoxLayout()
+        subtitle_row.setSpacing(8)
+        self.subtitle_label = QLabel("No subtitles yet")
+        self.subtitle_label.setObjectName("JobMeta")
+        self.subtitle_label.setWordWrap(True)
+        subtitle_row.addWidget(self.subtitle_label, 1)
+        self.open_subtitles_button = QToolButton()
+        self.open_subtitles_button.setObjectName("LinkButton")
+        self.open_subtitles_button.setText("Open Subtitles")
+        self.open_subtitles_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_subtitles_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.open_subtitles_button.clicked.connect(self._open_subtitles)
+        self.open_subtitles_button.setVisible(False)
+        subtitle_row.addWidget(self.open_subtitles_button)
+        detail_layout.addLayout(subtitle_row)
+
+        # -- live subtitle preview --------------------------------------------
+        self.subtitle_preview = SubtitlePreview()
+        self.subtitle_preview.setMinimumHeight(190)
+        detail_layout.addWidget(self.subtitle_preview)
+
         outer.addWidget(make_card(None, detail))
 
         scroll.setWidget(body)
@@ -205,6 +238,7 @@ class QueueView(QWidget):
         else:
             self.preview.clear()
         self._update_transcript_row(job)
+        self._update_subtitle_row(job)
         self.app_state.set_status(f"Inspecting {job.filename}")
 
     def _update_transcript_row(self, job) -> None:
@@ -228,6 +262,51 @@ class QueueView(QWidget):
                 )
             self.open_transcript_button.setVisible(False)
             self._last_transcript_path = ""
+
+    def _update_subtitle_row(self, job) -> None:
+        """Show subtitle status + preview for the selected job."""
+        if job.subtitle_path and Path(job.subtitle_path).exists():
+            formats = ", ".join(sorted(job.subtitle_formats)) or "srt"
+            warnings = job.subtitle_warnings or []
+            warn_text = f" — {len(warnings)} warning{'s' if len(warnings) != 1 else ''}" if warnings else ""
+            self.subtitle_label.setText(
+                f"Subtitles ready: {formats} · {Path(job.subtitle_path).name}{warn_text}"
+            )
+            if warnings:
+                self.subtitle_label.setToolTip("\n".join(warnings[:5]))
+            self.open_subtitles_button.setVisible(True)
+            self._last_subtitle_path = job.subtitle_path
+        else:
+            if job.stage is ProcessStage.FAILED:
+                self.subtitle_label.setText(f"Subtitle generation failed: {job.error or 'unknown error'}")
+            elif job.transcript:
+                self.subtitle_label.setText("Subtitles not generated for this job yet")
+            else:
+                self.subtitle_label.setText(
+                    "No subtitles yet — generated automatically after transcription"
+                )
+            self.open_subtitles_button.setVisible(False)
+            self._last_subtitle_path = ""
+
+        self._refresh_subtitle_preview(job)
+
+    def _refresh_subtitle_preview(self, job) -> None:
+        """Render a live caption preview from the job's transcript (cheap)."""
+        if self.subtitle_service is None or not job.transcript:
+            self.subtitle_preview.clear()
+            return
+        try:
+            settings = SubtitleSettings.from_config(self.app_state.config)
+            result = TranscriptResult.from_dict(job.transcript)
+            document = self.subtitle_service.engine.build(result, settings)
+            self.subtitle_preview.set_cues(document.cues)
+        except Exception as exc:  # pragma: no cover - preview must never crash
+            log.warning("Subtitle preview unavailable: %s", exc)
+            self.subtitle_preview.clear()
+
+    def _open_subtitles(self) -> None:
+        if self._last_subtitle_path:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(self._last_subtitle_path))
 
     def _open_transcript(self) -> None:
         if self._last_transcript_path:

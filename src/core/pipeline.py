@@ -39,6 +39,7 @@ class PipelineStage(str, Enum):
     AUDIO_READY = "Audio Ready"
     TRANSCRIPTION_READY = "Transcription Ready"
     SUBTITLE_READY = "Subtitle Ready"
+    SUBTITLE_VALIDATED = "Subtitle Validated"
     RENDER_READY = "Render Ready"
     COMPLETED = "Completed"
 
@@ -64,6 +65,7 @@ PIPELINE_ORDER: tuple[PipelineStage, ...] = (
     PipelineStage.AUDIO_READY,
     PipelineStage.TRANSCRIPTION_READY,
     PipelineStage.SUBTITLE_READY,
+    PipelineStage.SUBTITLE_VALIDATED,
     PipelineStage.RENDER_READY,
     PipelineStage.COMPLETED,
 )
@@ -90,6 +92,9 @@ class PipelineContext:
     audio_path: str = ""
     transcript_path: str = ""
     transcript: Optional[dict] = None
+    subtitle_path: str = ""
+    subtitle_formats: dict = field(default_factory=dict)
+    subtitle_warnings: list = field(default_factory=list)
 
     stage: PipelineStage = PipelineStage.IMPORTED
     progress: float = 0.0
@@ -133,7 +138,8 @@ _DEFAULT_WEIGHTS: dict[PipelineStage, float] = {
     PipelineStage.THUMBNAIL_READY: 12,
     PipelineStage.AUDIO_READY: 18,
     PipelineStage.TRANSCRIPTION_READY: 40,
-    PipelineStage.SUBTITLE_READY: 3,
+    PipelineStage.SUBTITLE_READY: 2,
+    PipelineStage.SUBTITLE_VALIDATED: 2,
     PipelineStage.RENDER_READY: 1,
     PipelineStage.COMPLETED: 1,
 }
