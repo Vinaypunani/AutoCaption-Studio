@@ -1,14 +1,18 @@
 {
     "theme": "dark",
     "language": "English",
-    "gpu": true,
+    "gpu": false,
     "output_folder": "output",
     "autosave": true,
     "update_channel": "stable",
-    "recent_files": [],
+    "recent_files": [
+        "C:/Users/tech/Downloads/vidssave.com Speak English Naturally With Me _ Easy Comprehensible Input Vlog 720P.mp4"
+    ],
     "window": {
         "width": 1280,
         "height": 800,
+        "x": 320,
+        "y": 116,
         "maximized": false
     }
 }
